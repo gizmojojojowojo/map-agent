@@ -201,5 +201,54 @@
   "W-003",
   "W-006"
  ],
- "off-topic": []
+ "off-topic": [],
+ "fresh-no-bigger": [
+  "W-002",
+  "W-005",
+  "W-007"
+ ],
+ "fresh-under-a-mile": [
+  "A-002",
+  "W-003"
+ ],
+ "fresh-kilometre-radius": [
+  "W-005"
+ ],
+ "fresh-two-places": [
+  "W-001",
+  "W-002",
+  "W-003",
+  "W-004"
+ ],
+ "fresh-closest-to-place": [
+  "W-006"
+ ],
+ "fresh-distance-band": [
+  "A-002",
+  "W-002",
+  "W-006"
+ ],
+ "fresh-vague-exclusion": [],
+ "fresh-hectares": [
+  "A-002",
+  "M-001",
+  "M-002",
+  "W-001",
+  "W-003",
+  "W-006"
+ ],
+ "fresh-two-exclusions": [
+  "A-001",
+  "A-003"
+ ],
+ "fresh-shorthand": [
+  "A-003"
+ ],
+ "fresh-typo-with-state": [
+  "W-001",
+  "W-002"
+ ],
+ "fresh-two-minimums": [
+  "W-004"
+ ]
 }

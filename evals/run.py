@@ -3,9 +3,14 @@
 A question passes when the agent made the expected tool calls with the expected
 inputs and the map ends up showing exactly the expected sites.
 
-Questions belong to a set. The "core" set gates the run. The "hard" set holds
-questions the agent is expected to get wrong at first; its score is reported
-separately and each failure prints the calls the agent made.
+Questions belong to a set. The "core" set gates the run. The "hard" and "fresh"
+sets are reported only, and each failure prints the calls the agent made. Hard
+questions were written to find limits and have since been used to guide fixes.
+Fresh questions have not been used that way, so they measure how well the fixes
+carry over to new wording.
+
+Models are not deterministic. --trials 3 asks each question three times and
+reports how many trials passed, which shows flaky questions.
 
 A question may list "sites" explicitly. That marks a target the current tools
 cannot reach with the listed calls, and the calls are not run when freezing.
@@ -14,6 +19,7 @@ and {"any_of": ["Ft. Morgan", "Fort Morgan"]} accepts any listed value.
 
 Usage:
     python -m evals.run --provider claude     # needs ANTHROPIC_API_KEY
+    python -m evals.run --provider claude --set fresh --trials 3
     python -m evals.run --freeze              # recompute expected site IDs after a data change
 """
 import argparse
@@ -27,6 +33,7 @@ from mapagent.store import MemoryStore
 QUESTIONS = Path(__file__).with_name("questions.json")
 EXPECTED = Path(__file__).with_name("expected_sites.json")
 THRESHOLD = 0.85
+SETS = ("core", "hard", "fresh")
 
 
 def same(expected, actual):
@@ -88,20 +95,33 @@ def score(question, result, expected_ids):
             "sites": shown == expected_ids, "complete": result["complete"], "made": made, "shown": shown}
 
 
-def run(provider, store, questions, expected):
+def attempt(provider, store, question, expected_ids):
+    try:
+        return score(question, agent.ask(question["question"], store, provider), expected_ids)
+    except Exception as error:  # one failed request should not hide the other results
+        return {"id": question["id"], "set": question.get("set", "core"), "calls": False, "sites": False,
+                "complete": False, "made": [], "shown": [], "error": repr(error)}
+
+
+def run(provider, store, questions, expected, trials=1):
+    """One row per question: the first failing trial if any failed, plus how many trials passed."""
     rows = []
     for number, q in enumerate(questions, 1):
         print(f"[{number}/{len(questions)}] {q['id']}", file=sys.stderr, flush=True)
-        try:
-            rows.append(score(q, agent.ask(q["question"], store, provider), expected[q["id"]]))
-        except Exception as error:  # one failed request should not hide the other results
-            rows.append({"id": q["id"], "set": q.get("set", "core"), "calls": False, "sites": False,
-                         "complete": False, "made": [], "shown": [], "error": repr(error)})
+        attempts = [attempt(provider, store, q, expected[q["id"]]) for _ in range(trials)]
+        good = [a for a in attempts if ok(a)]
+        shown = next((a for a in attempts if not ok(a)), attempts[0])
+        rows.append({**shown, "passes": len(good), "trials": trials})
     return rows
 
 
+def ok(attempt_row):
+    return attempt_row["calls"] and attempt_row["sites"] and attempt_row["complete"]
+
+
 def passed(row):
-    return row["calls"] and row["sites"] and row["complete"]
+    """A question passes only when every trial passed."""
+    return row["passes"] == row["trials"]
 
 
 def rate(rows):
@@ -111,16 +131,20 @@ def rate(rows):
 def report(rows, provider):
     lines = []
     for r in rows:
-        lines.append(f"{'PASS' if passed(r) else 'FAIL'}  {r['set']:<4} {r['id']:<24} calls={r['calls']} sites={r['sites']} {r.get('error', '')}")
+        label = "PASS" if passed(r) else "FAIL" if r["passes"] == 0 else "FLAKY"
+        tally = f" {r['passes']}/{r['trials']}" if r["trials"] > 1 else ""
+        lines.append(f"{label:<5}{tally} {r['set']:<5} {r['id']:<26} calls={r['calls']} sites={r['sites']} {r.get('error', '')}")
         if not passed(r) and "error" not in r:
             lines.append(f"      made:  {json.dumps(r['made'])}")
             lines.append(f"      shown: {json.dumps(r['shown'])}")
     lines.append("")
-    for name in ("core", "hard"):
+    for name in SETS:
         group = [r for r in rows if r["set"] == name]
         if group:
             gate = f" (threshold {THRESHOLD:.0%})" if name == "core" else " (reported only)"
-            lines.append(f"{provider} {name}: {sum(map(passed, group))} of {len(group)} passed, {rate(group):.0%}{gate}")
+            flaky = sum(0 < r["passes"] < r["trials"] for r in group)
+            lines.append(f"{provider} {name}: {sum(map(passed, group))} of {len(group)} passed, {rate(group):.0%}{gate}"
+                         + (f", {flaky} flaky" if flaky else ""))
     return "\n".join(lines)
 
 
@@ -128,7 +152,9 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--provider", default="claude")
     parser.add_argument("--freeze", action="store_true")
-    parser.add_argument("--set", choices=["core", "hard"], help="run one set only")
+    parser.add_argument("--set", choices=SETS, help="run one set only")
+    parser.add_argument("--trials", type=int, default=1, choices=range(1, 11), metavar="1-10",
+                        help="ask each question this many times")
     options = parser.parse_args()
     store, questions = MemoryStore(), json.loads(QUESTIONS.read_text())
     if options.freeze:
@@ -138,7 +164,7 @@ def main():
         return
     if options.set:
         questions = [q for q in questions if q.get("set", "core") == options.set]
-    rows = run(providers.get(options.provider), store, questions, json.loads(EXPECTED.read_text()))
+    rows = run(providers.get(options.provider), store, questions, json.loads(EXPECTED.read_text()), options.trials)
     print(report(rows, options.provider))
     core = [r for r in rows if r["set"] == "core"]
     sys.exit(0 if not core or rate(core) >= THRESHOLD else 1)

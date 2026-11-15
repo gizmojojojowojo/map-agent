@@ -58,15 +58,19 @@ python -m evals.run --provider claude
 python -m evals.run --provider openai   # needs OPENAI_API_KEY and MAP_AGENT_OPENAI_MODEL
 ```
 
-`evals/questions.json` holds 53 questions in two sets. A question passes when the agent makes the expected tool calls with the expected inputs and the map shows exactly the expected sites.
+`evals/questions.json` holds 65 questions in three sets. A question passes when the agent makes the expected tool calls with the expected inputs and the map shows exactly the expected sites.
 
 **Core (30 questions).** Each maps onto one tool or one two-step chain. Eight test restraint. Five ask for something the data lacks, such as price, zoning, or fiber service. Three have no matching place or site, and the correct answer says so. The run exits with an error when fewer than 85% of core questions pass.
 
 **Hard (23 questions).** These are written to find the agent's limits: unit conversions, misspelled and abbreviated place names, boundary values, vague requests, prompt injection, and requests the tools cannot express yet, such as a radius combined with a size filter. The score is reported without gating the run. Each failure prints the calls the agent made, which shows what to build next.
 
+**Fresh (12 questions).** The hard set guided the fixes, so a high score there mostly confirms those fixes. The fresh set uses wording and combinations that no fix was written against. It measures how well the agent handles requests it has not been tuned on. It is also reported without gating the run.
+
 ```bash
-python -m evals.run --provider claude --set hard
+python -m evals.run --provider claude --set fresh --trials 3
 ```
+
+Models give different answers to the same question from run to run. `--trials 3` asks each question three times, counts a question as passed only when every trial passes, and labels the rest `FLAKY` or `FAIL`.
 
 After changing the data, run `python -m evals.run --freeze` to recompute the expected sites.
 
@@ -76,10 +80,13 @@ After changing the data, run `python -m evals.run --freeze` to recompute the exp
 |---|---|---|---|
 | claude-haiku-5-5 | First version | 30 of 30 | 15 of 23 |
 | claude-haiku-5-5 | Second version | 27 of 30 | 21 of 23 |
+| claude-haiku-5-5 | Third version | 30 of 30 | 23 of 23 |
 
 The eight hard failures in the first version led to four changes: shared filters on `sites_near`, county exclusion, minimum distances, and tolerant place lookup. The system prompt also now tells the agent to ask about vague sizes and distances.
 
-In the second run, all five misses showed the correct sites. The agent passed values such as 300.01 for "over 300 acres", which the size filter's description now recommends, and the scorer expected exactly 300. The expected inputs for "over" and "under" questions now accept either form.
+In the second run, all five misses showed the correct sites. The agent passed values such as 300.01 for "over 300 acres", which the size filter's description now recommends, and the scorer expected exactly 300. The expected inputs for "over" and "under" questions now accept either form, which the third run confirms.
+
+Each score above comes from a single trial per question.
 
 ## Project status
 

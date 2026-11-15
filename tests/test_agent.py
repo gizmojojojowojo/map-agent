@@ -112,7 +112,7 @@ def test_frozen_expectations_match_the_fixture():
     assert {q["id"]: sorted(q["sites"]) if "sites" in q else evals.expected_sites(STORE, q["calls"])
             for q in questions} == frozen
     core = [q for q in questions if q.get("set", "core") == "core"]
-    assert len(core) == 30 and len(questions) - len(core) == 23
+    assert len(core) == 30 and [sum(q.get("set") == name for q in questions) for name in ("hard", "fresh")] == [23, 12]
     empty = {q["id"] for q in core if not frozen[q["id"]]}
     refusals = {q["id"] for q in core if not q["calls"]}
     assert len(refusals) == 5 and empty - refusals == {"unknown-place", "near-greeley-empty", "no-match"}
@@ -150,12 +150,24 @@ def test_approximate_inputs_and_report():
     assert evals.same({"approx": 1.243, "tolerance": 0.1}, 1.2)
     assert not evals.same({"approx": 1.243, "tolerance": 0.1}, 2)
     assert not evals.same({"approx": 1.243, "tolerance": 0.1}, "1.2")
-    rows = [{"id": "a", "set": "core", "calls": True, "sites": True, "complete": True, "made": [], "shown": []},
+    rows = [{"id": "a", "set": "core", "calls": True, "sites": True, "complete": True, "made": [], "shown": [],
+             "passes": 1, "trials": 1},
             {"id": "b", "set": "hard", "calls": False, "sites": True, "complete": True,
-             "made": [{"tool": "search_sites", "args": {}}], "shown": ["W-001"]}]
+             "made": [{"tool": "search_sites", "args": {}}], "shown": ["W-001"], "passes": 0, "trials": 1}]
     text = evals.report(rows, "claude")
     assert "claude core: 1 of 1 passed, 100%" in text and "claude hard: 0 of 1 passed, 0%" in text
     assert 'made:  [{"tool": "search_sites", "args": {}}]' in text
+
+
+def test_trials_report_flaky_questions():
+    question = {"id": "q", "question": "Sites over 300 acres in Weld County",
+                "calls": [{"tool": "search_sites", "args": {"min_acres": 300, "counties": ["Weld"]}}]}
+    right = [Turn(calls=[Call("c1", "search_sites", {"min_acres": 300, "counties": ["Weld"]})]), Turn("done")]
+    wrong = [Turn(calls=[Call("c1", "search_sites", {"min_acres": 300})]), Turn("done")]
+    rows = evals.run(ScriptedProvider(right + wrong + right), STORE, [question], {"q": ["W-001", "W-003", "W-006"]}, trials=3)
+    assert rows[0]["passes"] == 2 and rows[0]["trials"] == 3 and not rows[0]["sites"]  # shows the failing trial
+    text = evals.report(rows, "claude")
+    assert text.startswith("FLAKY 2/3") and "0 of 1 passed, 0% (threshold 85%), 1 flaky" in text
 
 
 def test_openai_message_conversion():
