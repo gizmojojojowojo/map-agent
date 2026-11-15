@@ -15,7 +15,7 @@ Ask a question about land sites in plain language and see the answer on a map.
 | Tool | What it does |
 |---|---|
 | `search_sites` | Filters sites by acreage, county, and distance to transmission lines and highways |
-| `sites_near` | Finds sites within a radius of a point, with the same filters |
+| `sites_near` | Finds sites within a radius of one or more points, with the same filters |
 | `geocode_place` | Looks up the coordinates of a named town, tolerating misspellings and abbreviations |
 
 The model can chain tools. "What's within 5 miles of Hudson?" calls `geocode_place`, then `sites_near`.
@@ -76,17 +76,19 @@ After changing the data, run `python -m evals.run --freeze` to recompute the exp
 
 ### Results
 
-| Model | Version | Core | Hard |
-|---|---|---|---|
-| claude-haiku-5-5 | First version | 30 of 30 | 15 of 23 |
-| claude-haiku-5-5 | Second version | 27 of 30 | 21 of 23 |
-| claude-haiku-5-5 | Third version | 30 of 30 | 23 of 23 |
+| Model | Version | Core | Hard | Fresh |
+|---|---|---|---|---|
+| claude-haiku-5-5 | First version | 30 of 30 | 15 of 23 | |
+| claude-haiku-5-5 | Second version | 27 of 30 | 21 of 23 | |
+| claude-haiku-5-5 | Third version | 30 of 30 | 23 of 23 | 7 of 12 |
 
 The eight hard failures in the first version led to four changes: shared filters on `sites_near`, county exclusion, minimum distances, and tolerant place lookup. The system prompt also now tells the agent to ask about vague sizes and distances.
 
 In the second run, all five misses showed the correct sites. The agent passed values such as 300.01 for "over 300 acres", which the size filter's description now recommends, and the scorer expected exactly 300. The expected inputs for "over" and "under" questions now accept either form, which the third run confirms.
 
-Each score above comes from a single trial per question.
+Core and hard scores come from a single trial per question. The fresh score uses three trials.
+
+The fresh set scored 7 of 12 on its first run, against 100% on the two sets the agent had been tuned on. The five misses had five causes: exclusive wording on distances, a result limit the agent set on its own, a place name with a state attached, a request for sites near either of two places, and a rounding error in the scorer. Each is addressed in the fourth version.
 
 ## Project status
 

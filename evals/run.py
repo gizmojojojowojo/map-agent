@@ -41,13 +41,14 @@ def same(expected, actual):
         return any(same(option, actual) for option in expected["any_of"])
     if isinstance(expected, dict) and "approx" in expected:
         return (isinstance(actual, (int, float)) and not isinstance(actual, bool)
-                and abs(expected["approx"] - actual) <= expected["tolerance"])
+                and abs(expected["approx"] - actual) <= expected["tolerance"] + 1e-9)
     if isinstance(expected, (int, float)) and not isinstance(expected, bool):
         return isinstance(actual, (int, float)) and abs(expected - actual) < 1e-6
     if isinstance(expected, str):
         return isinstance(actual, str) and expected.strip().lower() == actual.strip().lower()
-    if isinstance(expected, list):
-        return isinstance(actual, list) and sorted(map(str.lower, expected)) == sorted(map(str.lower, actual))
+    if isinstance(expected, list) and all(isinstance(item, str) for item in expected):
+        return (isinstance(actual, list) and all(isinstance(item, str) for item in actual)
+                and sorted(map(str.lower, expected)) == sorted(map(str.lower, actual)))
     return expected == actual
 
 

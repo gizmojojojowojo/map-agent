@@ -146,7 +146,28 @@ def test_geocode_tolerates_spelling_and_abbreviation():
     assert not evals.same({"any_of": ["Ft. Morgan", "Fort Morgan"]}, "Morgan")
 
 
+def test_near_any_of_several_points():
+    hudson, keenesburg = STORE.geocode("Hudson")[0], STORE.geocode("Keenesburg")[0]
+    args = {"latitude": hudson["latitude"], "longitude": hudson["longitude"], "radius_miles": 5}
+    one, _ = tools.call(STORE, "sites_near", args)
+    both, features = tools.call(STORE, "sites_near", {**args, "more_points": [
+        {"latitude": keenesburg["latitude"], "longitude": keenesburg["longitude"]}]})
+    assert sorted(s["site_id"] for s in one["sites"]) == ["W-001", "W-002"]
+    assert sorted(s["site_id"] for s in both["sites"]) == ["W-001", "W-002", "W-003", "W-004"]
+    assert all(s["distance_miles"] <= 5 for s in both["sites"]) and len(features) == 4
+    too_many, _ = tools.call(STORE, "sites_near", {**args, "more_points": [{"latitude": 40, "longitude": -104}] * 5})
+    assert "Invalid input" in too_many["error"]
+
+
+def test_geocode_ignores_a_state_qualifier():
+    assert [(p["name"], p["match"]) for p in STORE.geocode("Hudsun, Colorado")] == [("Hudson", "close")]
+    assert [(p["name"], p["match"]) for p in STORE.geocode("Fort Morgan, CO")] == [("Fort Morgan", "exact")]
+    assert STORE.geocode("Springfield, Colorado") == []
+
+
 def test_approximate_inputs_and_report():
+    assert evals.same({"approx": 1.05, "tolerance": 0.05}, 1) and evals.same({"approx": 1.05, "tolerance": 0.05}, 1.1)
+    assert not evals.same({"approx": 1.05, "tolerance": 0.05}, 0.99)
     assert evals.same({"approx": 1.243, "tolerance": 0.1}, 1.2)
     assert not evals.same({"approx": 1.243, "tolerance": 0.1}, 2)
     assert not evals.same({"approx": 1.243, "tolerance": 0.1}, "1.2")

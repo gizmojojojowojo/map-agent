@@ -33,8 +33,11 @@ def miles_between(lat1, lon1, lat2, lon2):
 
 
 def normalize_place(name):
-    """Lower-case, drop punctuation and expand common abbreviations: 'Ft. Morgan' -> 'fort morgan'."""
-    words = re.sub(r"[^\w\s]", " ", name.lower()).split()
+    """Lower-case, drop punctuation and expand common abbreviations: 'Ft. Morgan, CO' -> 'fort morgan'.
+
+    Anything after a comma is dropped, so a state or county qualifier is ignored.
+    """
+    words = re.sub(r"[^\w\s]", " ", name.split(",")[0].lower()).split()
     return " ".join(ABBREVIATIONS.get(w, w) for w in words)
 
 
@@ -66,8 +69,9 @@ class MemoryStore:
 
     def near(self, request):
         rows = []
+        points = [(request.latitude, request.longitude), *((p.latitude, p.longitude) for p in request.more_points)]
         for s in self.sites:
-            d = miles_between(request.latitude, request.longitude, s["latitude"], s["longitude"])
+            d = min(miles_between(lat, lon, s["latitude"], s["longitude"]) for lat, lon in points)
             if d <= request.radius_miles and matches(s, request):
                 rows.append({**s, "distance_miles": round(d, 2)})
         rows.sort(key=lambda s: (s["distance_miles"], s["site_id"]))
@@ -124,14 +128,18 @@ class PostgisStore:
 
     def near(self, request):
         point = "ST_SetSRID(ST_MakePoint(%s, %s), 4326)::geography"
+        lonlats = [(request.longitude, request.latitude), *((p.longitude, p.latitude) for p in request.more_points)]
+        distances = ", ".join(f"ST_Distance(geom::geography, {point})" for _ in lonlats)
+        distance = f"LEAST({distances})" if len(lonlats) > 1 else distances
+        within = " OR ".join(f"ST_DWithin(geom::geography, {point}, %s)" for _ in lonlats)
+        radius = request.radius_miles * METERS_PER_MILE
         where, params = self._where(request)
-        where.insert(0, f"ST_DWithin(geom::geography, {point}, %s)")
-        query = (f"SELECT {self.COLUMNS}, round((ST_Distance(geom::geography, {point}) / {METERS_PER_MILE})::numeric, 2)::float "
-                 f"AS distance_miles FROM map_agent.sites WHERE {' AND '.join(where)} "
+        query = (f"SELECT {self.COLUMNS}, round(({distance} / {METERS_PER_MILE})::numeric, 2)::float AS distance_miles "
+                 f"FROM map_agent.sites WHERE {' AND '.join([f'({within})', *where])} "
                  "ORDER BY distance_miles, site_id LIMIT %s")
-        lonlat = (request.longitude, request.latitude)
-        return self.connection.execute(
-            query, [*lonlat, *lonlat, request.radius_miles * METERS_PER_MILE, *params, request.limit]).fetchall()
+        distance_params = [value for lonlat in lonlats for value in lonlat]
+        within_params = [value for lonlat in lonlats for value in (*lonlat, radius)]
+        return self.connection.execute(query, [*distance_params, *within_params, *params, request.limit]).fetchall()
 
     def geocode(self, name):
         wanted = normalize_place(name)
