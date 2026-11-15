@@ -2,6 +2,7 @@
 
 Run: uvicorn mapagent.api:app --reload
 """
+import logging
 import os
 from functools import lru_cache
 from pathlib import Path
@@ -16,6 +17,7 @@ from .store import MemoryStore, PostgisStore
 
 WEB = Path(__file__).resolve().parents[1] / "web"
 app = FastAPI(title="Map agent")
+log = logging.getLogger("uvicorn.error")
 
 
 class AskRequest(BaseModel):
@@ -44,3 +46,8 @@ def ask(request: AskRequest):
         return agent.ask(request.question, store(), provider())
     except ValueError as error:
         raise HTTPException(422, str(error)) from None
+    except Exception as error:  # report the cause instead of a bare 500; full detail goes to the log
+        log.exception("Question failed")
+        name = type(error).__name__
+        hint = " Check the API key the server was started with." if "Auth" in name or "api_key" in str(error) else ""
+        raise HTTPException(502, f"The model request failed ({name}).{hint} The server log has the details.") from None

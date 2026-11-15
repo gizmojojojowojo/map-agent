@@ -49,7 +49,10 @@ $('ask').addEventListener('submit', async event => {
   try {
     const response = await fetch('/agent/ask', { method: 'POST', headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ question: $('question').value }) });
-    if (!response.ok) throw new Error(`Request failed (${response.status})`);
+    if (!response.ok) {
+      const problem = await response.json().catch(() => ({}));
+      throw new Error(typeof problem.detail === 'string' ? problem.detail : `Request failed (${response.status}). Try again.`);
+    }
     const result = await response.json();
     $('answer').textContent = result.answer;
     $('boundary').textContent = result.evidence_boundary;
@@ -58,7 +61,7 @@ $('ask').addEventListener('submit', async event => {
     layer = L.geoJSON(result.features, { onEachFeature: (f, l) => l.bindPopup(`${f.id}: ${f.properties.acres} acres, ${f.properties.county} County`) }).addTo(map);
     if (result.features.features.length) map.fitBounds(layer.getBounds(), { maxZoom: 12, padding: [30, 30] });
   } catch (error) {
-    $('answer').textContent = `${error.message}. Try again.`;
+    $('answer').textContent = error.message;
   }
 });
 </script>
