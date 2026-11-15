@@ -1,4 +1,5 @@
--- Map agent schema. Requires PostGIS: CREATE EXTENSION IF NOT EXISTS postgis;
+-- Map agent schema. Requires the postgis and pg_trgm extensions:
+--   CREATE EXTENSION IF NOT EXISTS postgis; CREATE EXTENSION IF NOT EXISTS pg_trgm;
 -- Each site keeps its source record as JSON; the searchable columns are generated from it.
 CREATE SCHEMA IF NOT EXISTS map_agent;
 
@@ -18,6 +19,7 @@ CREATE TABLE map_agent.sites (
 CREATE TABLE map_agent.places (
     name text NOT NULL,
     kind text NOT NULL,
+    search_name text NOT NULL,  -- normalised by mapagent.store.normalize_place
     geom geometry(Point, 4326) NOT NULL,
     PRIMARY KEY (name, kind)
 );
@@ -25,4 +27,4 @@ CREATE TABLE map_agent.places (
 CREATE INDEX sites_geom_idx ON map_agent.sites USING gist (geom);
 CREATE INDEX sites_geography_idx ON map_agent.sites USING gist ((geom::geography));
 CREATE INDEX sites_filters_idx ON map_agent.sites (county, acres);
-CREATE INDEX places_name_idx ON map_agent.places (lower(name));
+CREATE INDEX places_search_name_idx ON map_agent.places USING gin (search_name gin_trgm_ops);

@@ -3,16 +3,21 @@
 MemoryStore runs on the synthetic fixture with no database; tests and evals use it.
 PostgisStore runs the same three queries against PostGIS.
 """
+import difflib
 import json
 import math
+import re
 from pathlib import Path
 from typing import Protocol
 
-from .models import SearchSites, SitesNear
+from .models import SearchSites, SiteFilters, SitesNear
 
 FIXTURE = Path(__file__).resolve().parents[1] / "data/fixture.json"
 SORTS = {"acres": ("acres", True), "power": ("power_miles", False), "highway": ("highway_miles", False)}
 METERS_PER_MILE = 1609.344
+ABBREVIATIONS = {"ft": "fort", "mt": "mount", "st": "saint"}
+RANGES = (("acres", "min_acres", "max_acres"), ("power_miles", "min_power_miles", "max_power_miles"),
+          ("highway_miles", "min_highway_miles", "max_highway_miles"))
 
 
 class Store(Protocol):
@@ -27,6 +32,25 @@ def miles_between(lat1, lon1, lat2, lon2):
     return 2 * 3958.7613 * math.asin(math.sqrt(a))
 
 
+def normalize_place(name):
+    """Lower-case, drop punctuation and expand common abbreviations: 'Ft. Morgan' -> 'fort morgan'."""
+    words = re.sub(r"[^\w\s]", " ", name.lower()).split()
+    return " ".join(ABBREVIATIONS.get(w, w) for w in words)
+
+
+def matches(site, filters: SiteFilters):
+    for column, low, high in RANGES:
+        minimum, maximum = getattr(filters, low), getattr(filters, high)
+        if minimum is not None and site[column] < minimum:
+            return False
+        if maximum is not None and site[column] > maximum:
+            return False
+    county = site["county"].lower()
+    if filters.counties and county not in {c.lower() for c in filters.counties}:
+        return False
+    return county not in {c.lower() for c in filters.exclude_counties}
+
+
 class MemoryStore:
     """Fixture-backed store. Distances are measured to the site's centre point."""
 
@@ -35,13 +59,7 @@ class MemoryStore:
         self.sites, self.places = data["sites"], data["places"]
 
     def search(self, criteria):
-        counties = {c.lower() for c in criteria.counties}
-        rows = [s for s in self.sites
-                if s["acres"] >= criteria.min_acres
-                and (criteria.max_acres is None or s["acres"] <= criteria.max_acres)
-                and (criteria.max_power_miles is None or s["power_miles"] <= criteria.max_power_miles)
-                and (criteria.max_highway_miles is None or s["highway_miles"] <= criteria.max_highway_miles)
-                and (not counties or s["county"].lower() in counties)]
+        rows = [s for s in self.sites if matches(s, criteria)]
         key, descending = SORTS[criteria.sort_by]
         rows.sort(key=lambda s: (-s[key] if descending else s[key], s["site_id"]))
         return rows[:criteria.limit]
@@ -50,14 +68,18 @@ class MemoryStore:
         rows = []
         for s in self.sites:
             d = miles_between(request.latitude, request.longitude, s["latitude"], s["longitude"])
-            if d <= request.radius_miles:
+            if d <= request.radius_miles and matches(s, request):
                 rows.append({**s, "distance_miles": round(d, 2)})
         rows.sort(key=lambda s: (s["distance_miles"], s["site_id"]))
         return rows[:request.limit]
 
     def geocode(self, name):
-        wanted = name.strip().lower()
-        return [p for p in self.places if p["name"].lower() == wanted]
+        wanted = normalize_place(name)
+        by_name = {normalize_place(p["name"]): p for p in self.places}
+        if wanted in by_name:
+            return [{**by_name[wanted], "match": "exact"}]
+        close = difflib.get_close_matches(wanted, list(by_name), n=3, cutoff=0.8)
+        return [{**by_name[n], "match": "close"} for n in close]
 
 
 class PostgisStore:
@@ -77,30 +99,48 @@ class PostgisStore:
         self.connection = psycopg.connect(database_url, autocommit=True, row_factory=dict_row)
         self.connection.execute("SET default_transaction_read_only = on")
 
-    def search(self, criteria):
-        where, params = ["acres >= %s"], [criteria.min_acres]
-        for column, value in (("acres", criteria.max_acres), ("power_miles", criteria.max_power_miles),
-                              ("highway_miles", criteria.max_highway_miles)):
-            if value is not None:
-                where.append(f"{column} <= %s")
-                params.append(value)
-        if criteria.counties:
+    @staticmethod
+    def _where(filters):
+        """SQL conditions and parameters for the shared filters. Column names come from RANGES, never from input."""
+        where, params = [], []
+        for column, low, high in RANGES:
+            for operator, value in ((">=", getattr(filters, low)), ("<=", getattr(filters, high))):
+                if value is not None:
+                    where.append(f"{column} {operator} %s")
+                    params.append(value)
+        if filters.counties:
             where.append("lower(county) = ANY(%s)")
-            params.append([c.lower() for c in criteria.counties])
-        query = (f"SELECT {self.COLUMNS} FROM map_agent.sites WHERE {' AND '.join(where)} "
+            params.append([c.lower() for c in filters.counties])
+        if filters.exclude_counties:
+            where.append("NOT lower(county) = ANY(%s)")
+            params.append([c.lower() for c in filters.exclude_counties])
+        return where, params
+
+    def search(self, criteria):
+        where, params = self._where(criteria)
+        query = (f"SELECT {self.COLUMNS} FROM map_agent.sites WHERE {' AND '.join(where) or 'true'} "
                  f"ORDER BY {self.ORDER[criteria.sort_by]}, site_id LIMIT %s")
         return self.connection.execute(query, [*params, criteria.limit]).fetchall()
 
     def near(self, request):
         point = "ST_SetSRID(ST_MakePoint(%s, %s), 4326)::geography"
+        where, params = self._where(request)
+        where.insert(0, f"ST_DWithin(geom::geography, {point}, %s)")
         query = (f"SELECT {self.COLUMNS}, round((ST_Distance(geom::geography, {point}) / {METERS_PER_MILE})::numeric, 2)::float "
-                 f"AS distance_miles FROM map_agent.sites WHERE ST_DWithin(geom::geography, {point}, %s) "
+                 f"AS distance_miles FROM map_agent.sites WHERE {' AND '.join(where)} "
                  "ORDER BY distance_miles, site_id LIMIT %s")
         lonlat = (request.longitude, request.latitude)
         return self.connection.execute(
-            query, [*lonlat, *lonlat, request.radius_miles * METERS_PER_MILE, request.limit]).fetchall()
+            query, [*lonlat, *lonlat, request.radius_miles * METERS_PER_MILE, *params, request.limit]).fetchall()
 
     def geocode(self, name):
+        wanted = normalize_place(name)
+        columns = "name, kind, ST_Y(geom) AS latitude, ST_X(geom) AS longitude"
+        exact = self.connection.execute(
+            f"SELECT {columns}, 'exact' AS match FROM map_agent.places WHERE search_name = %s ORDER BY name LIMIT 5",
+            [wanted]).fetchall()
+        if exact:
+            return exact
         return self.connection.execute(
-            "SELECT name, kind, ST_Y(geom) AS latitude, ST_X(geom) AS longitude "
-            "FROM map_agent.places WHERE lower(name) = lower(%s) ORDER BY name LIMIT 5", [name.strip()]).fetchall()
+            f"SELECT {columns}, 'close' AS match FROM map_agent.places WHERE similarity(search_name, %s) > 0.5 "
+            "ORDER BY similarity(search_name, %s) DESC, name LIMIT 3", [wanted, wanted]).fetchall()

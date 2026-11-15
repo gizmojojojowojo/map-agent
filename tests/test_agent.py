@@ -118,6 +118,34 @@ def test_frozen_expectations_match_the_fixture():
     assert len(refusals) == 5 and empty - refusals == {"unknown-place", "near-greeley-empty", "no-match"}
 
 
+def test_near_accepts_the_shared_filters():
+    hudson = STORE.geocode("Hudson")[0]
+    args = {"latitude": hudson["latitude"], "longitude": hudson["longitude"], "radius_miles": 12}
+    everything, _ = tools.call(STORE, "sites_near", args)
+    large, _ = tools.call(STORE, "sites_near", {**args, "min_acres": 300})
+    assert everything["count"] == 6 and [s["site_id"] for s in large["sites"]] == ["W-001", "W-003"]
+    powered, _ = tools.call(STORE, "sites_near", {**args, "max_power_miles": 1, "exclude_counties": ["adams"]})
+    assert [s["site_id"] for s in powered["sites"]] == ["W-001"]
+
+
+def test_exclusion_and_minimum_distance():
+    other, _ = tools.call(STORE, "search_sites", {"min_acres": 200.5, "exclude_counties": ["Weld"]})
+    assert sorted(s["site_id"] for s in other["sites"]) == ["A-001", "A-002", "M-001", "M-002"]
+    far, _ = tools.call(STORE, "search_sites", {"min_highway_miles": 2.5})
+    assert [s["site_id"] for s in far["sites"]] == ["W-005"]
+    above, _ = tools.call(STORE, "search_sites", {"min_acres": 400.01})
+    assert "M-002" not in [s["site_id"] for s in above["sites"]] and above["count"] == 4
+
+
+def test_geocode_tolerates_spelling_and_abbreviation():
+    assert [(p["name"], p["match"]) for p in STORE.geocode("keenesburg")] == [("Keenesburg", "exact")]
+    assert [(p["name"], p["match"]) for p in STORE.geocode("Keensburg")] == [("Keenesburg", "close")]
+    assert [(p["name"], p["match"]) for p in STORE.geocode("Ft. Morgan")] == [("Fort Morgan", "exact")]
+    assert STORE.geocode("Springfield") == [] and STORE.geocode("Fort") == []
+    assert evals.same({"any_of": ["Ft. Morgan", "Fort Morgan"]}, "fort morgan")
+    assert not evals.same({"any_of": ["Ft. Morgan", "Fort Morgan"]}, "Morgan")
+
+
 def test_approximate_inputs_and_report():
     assert evals.same({"approx": 1.243, "tolerance": 0.1}, 1.2)
     assert not evals.same({"approx": 1.243, "tolerance": 0.1}, 2)

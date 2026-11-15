@@ -15,8 +15,8 @@ Ask a question about land sites in plain language and see the answer on a map.
 | Tool | What it does |
 |---|---|
 | `search_sites` | Filters sites by acreage, county, and distance to transmission lines and highways |
-| `sites_near` | Finds sites within a radius of a point |
-| `geocode_place` | Looks up the coordinates of a named town |
+| `sites_near` | Finds sites within a radius of a point, with the same filters |
+| `geocode_place` | Looks up the coordinates of a named town, tolerating misspellings and abbreviations |
 
 The model can chain tools. "What's within 5 miles of Hudson?" calls `geocode_place`, then `sites_near`.
 
@@ -38,7 +38,7 @@ With no database configured, the app uses `data/fixture.json`. The fixture holds
 ### Use PostGIS
 
 ```bash
-createdb map_agent && psql map_agent -c "CREATE EXTENSION postgis" -f sql/001_schema.sql
+createdb map_agent && psql map_agent -c "CREATE EXTENSION postgis" -c "CREATE EXTENSION pg_trgm" -f sql/001_schema.sql
 export MAP_AGENT_DATABASE_URL=postgresql://localhost/map_agent
 python scripts/load_fixture.py
 ```
@@ -72,9 +72,11 @@ After changing the data, run `python -m evals.run --freeze` to recompute the exp
 
 ### Results
 
-| Model | Core | Hard |
-|---|---|---|
-| claude-haiku-5-5 | 30 of 30 | not yet run |
+| Model | Version | Core | Hard |
+|---|---|---|---|
+| claude-haiku-5-5 | First version | 30 of 30 | 15 of 23 |
+
+The eight hard failures in the first version led to four changes: shared filters on `sites_near`, county exclusion, minimum distances, and tolerant place lookup. The system prompt also now tells the agent to ask about vague sizes and distances.
 
 ## Project status
 

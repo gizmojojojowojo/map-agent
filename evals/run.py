@@ -9,7 +9,8 @@ separately and each failure prints the calls the agent made.
 
 A question may list "sites" explicitly. That marks a target the current tools
 cannot reach with the listed calls, and the calls are not run when freezing.
-An expected input written as {"approx": 1.24, "tolerance": 0.1} accepts a range.
+An expected input written as {"approx": 1.24, "tolerance": 0.1} accepts a range,
+and {"any_of": ["Ft. Morgan", "Fort Morgan"]} accepts any listed value.
 
 Usage:
     python -m evals.run --provider claude     # needs ANTHROPIC_API_KEY
@@ -29,6 +30,8 @@ THRESHOLD = 0.85
 
 
 def same(expected, actual):
+    if isinstance(expected, dict) and "any_of" in expected:
+        return any(same(option, actual) for option in expected["any_of"])
     if isinstance(expected, dict) and "approx" in expected:
         return (isinstance(actual, (int, float)) and not isinstance(actual, bool)
                 and abs(expected["approx"] - actual) <= expected["tolerance"])
@@ -39,6 +42,15 @@ def same(expected, actual):
     if isinstance(expected, list):
         return isinstance(actual, list) and sorted(map(str.lower, expected)) == sorted(map(str.lower, actual))
     return expected == actual
+
+
+def representative(value):
+    """One concrete value for an expected input written as approx or any_of."""
+    if isinstance(value, dict) and "approx" in value:
+        return value["approx"]
+    if isinstance(value, dict) and "any_of" in value:
+        return value["any_of"][0]
+    return value
 
 
 def calls_match(expected, trace):
@@ -53,7 +65,7 @@ def expected_sites(store, calls):
     """Run the expected calls directly, feeding a geocoded place into the next sites_near."""
     sites, place = [], None
     for c in calls:
-        args = {k: v["approx"] if isinstance(v, dict) and "approx" in v else v for k, v in c["args"].items()}
+        args = {k: representative(v) for k, v in c["args"].items()}
         if c["tool"] == "sites_near" and place:
             args.update(latitude=place["latitude"], longitude=place["longitude"])
         result, features = tools.call(store, c["tool"], args)
