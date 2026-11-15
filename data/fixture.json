@@ -1,0 +1,499 @@
+{
+ "synthetic": true,
+ "sites": [
+  {
+   "site_id": "W-001",
+   "county": "Weld",
+   "acres": 320,
+   "power_miles": 0.8,
+   "highway_miles": 1.2,
+   "latitude": 40.09,
+   "longitude": -104.62,
+   "geometry": {
+    "type": "Polygon",
+    "coordinates": [
+     [
+      [
+       -104.626681,
+       40.084889
+      ],
+      [
+       -104.613319,
+       40.084889
+      ],
+      [
+       -104.613319,
+       40.095111
+      ],
+      [
+       -104.626681,
+       40.095111
+      ],
+      [
+       -104.626681,
+       40.084889
+      ]
+     ]
+    ]
+   }
+  },
+  {
+   "site_id": "W-002",
+   "county": "Weld",
+   "acres": 85,
+   "power_miles": 2.5,
+   "highway_miles": 0.4,
+   "latitude": 40.05,
+   "longitude": -104.66,
+   "geometry": {
+    "type": "Polygon",
+    "coordinates": [
+     [
+      [
+       -104.663441,
+       40.047366
+      ],
+      [
+       -104.656559,
+       40.047366
+      ],
+      [
+       -104.656559,
+       40.052634
+      ],
+      [
+       -104.663441,
+       40.052634
+      ],
+      [
+       -104.663441,
+       40.047366
+      ]
+     ]
+    ]
+   }
+  },
+  {
+   "site_id": "W-003",
+   "county": "Weld",
+   "acres": 640,
+   "power_miles": 1.5,
+   "highway_miles": 0.9,
+   "latitude": 40.12,
+   "longitude": -104.5,
+   "geometry": {
+    "type": "Polygon",
+    "coordinates": [
+     [
+      [
+       -104.509453,
+       40.112772
+      ],
+      [
+       -104.490547,
+       40.112772
+      ],
+      [
+       -104.490547,
+       40.127228
+      ],
+      [
+       -104.509453,
+       40.127228
+      ],
+      [
+       -104.509453,
+       40.112772
+      ]
+     ]
+    ]
+   }
+  },
+  {
+   "site_id": "W-004",
+   "county": "Weld",
+   "acres": 210,
+   "power_miles": 4.2,
+   "highway_miles": 2.0,
+   "latitude": 40.1,
+   "longitude": -104.54,
+   "geometry": {
+    "type": "Polygon",
+    "coordinates": [
+     [
+      [
+       -104.545413,
+       40.095859
+      ],
+      [
+       -104.534587,
+       40.095859
+      ],
+      [
+       -104.534587,
+       40.104141
+      ],
+      [
+       -104.545413,
+       40.104141
+      ],
+      [
+       -104.545413,
+       40.095859
+      ]
+     ]
+    ]
+   }
+  },
+  {
+   "site_id": "W-005",
+   "county": "Weld",
+   "acres": 150,
+   "power_miles": 0.5,
+   "highway_miles": 3.1,
+   "latitude": 40.4,
+   "longitude": -104.65,
+   "geometry": {
+    "type": "Polygon",
+    "coordinates": [
+     [
+      [
+       -104.654595,
+       40.396501
+      ],
+      [
+       -104.645405,
+       40.396501
+      ],
+      [
+       -104.645405,
+       40.403499
+      ],
+      [
+       -104.654595,
+       40.403499
+      ],
+      [
+       -104.654595,
+       40.396501
+      ]
+     ]
+    ]
+   }
+  },
+  {
+   "site_id": "W-006",
+   "county": "Weld",
+   "acres": 480,
+   "power_miles": 3.0,
+   "highway_miles": 0.7,
+   "latitude": 40.22,
+   "longitude": -104.8,
+   "geometry": {
+    "type": "Polygon",
+    "coordinates": [
+     [
+      [
+       -104.808198,
+       40.21374
+      ],
+      [
+       -104.791802,
+       40.21374
+      ],
+      [
+       -104.791802,
+       40.22626
+      ],
+      [
+       -104.808198,
+       40.22626
+      ],
+      [
+       -104.808198,
+       40.21374
+      ]
+     ]
+    ]
+   }
+  },
+  {
+   "site_id": "W-007",
+   "county": "Weld",
+   "acres": 60,
+   "power_miles": 1.1,
+   "highway_miles": 0.3,
+   "latitude": 40.08,
+   "longitude": -104.79,
+   "geometry": {
+    "type": "Polygon",
+    "coordinates": [
+     [
+      [
+       -104.792893,
+       40.077787
+      ],
+      [
+       -104.787107,
+       40.077787
+      ],
+      [
+       -104.787107,
+       40.082213
+      ],
+      [
+       -104.792893,
+       40.082213
+      ],
+      [
+       -104.792893,
+       40.077787
+      ]
+     ]
+    ]
+   }
+  },
+  {
+   "site_id": "A-001",
+   "county": "Adams",
+   "acres": 240,
+   "power_miles": 0.9,
+   "highway_miles": 1.4,
+   "latitude": 39.97,
+   "longitude": -104.78,
+   "geometry": {
+    "type": "Polygon",
+    "coordinates": [
+     [
+      [
+       -104.785776,
+       39.965573
+      ],
+      [
+       -104.774224,
+       39.965573
+      ],
+      [
+       -104.774224,
+       39.974427
+      ],
+      [
+       -104.785776,
+       39.974427
+      ],
+      [
+       -104.785776,
+       39.965573
+      ]
+     ]
+    ]
+   }
+  },
+  {
+   "site_id": "A-002",
+   "county": "Adams",
+   "acres": 900,
+   "power_miles": 2.2,
+   "highway_miles": 0.6,
+   "latitude": 39.76,
+   "longitude": -104.43,
+   "geometry": {
+    "type": "Polygon",
+    "coordinates": [
+     [
+      [
+       -104.441151,
+       39.751428
+      ],
+      [
+       -104.418849,
+       39.751428
+      ],
+      [
+       -104.418849,
+       39.768572
+      ],
+      [
+       -104.441151,
+       39.768572
+      ],
+      [
+       -104.441151,
+       39.751428
+      ]
+     ]
+    ]
+   }
+  },
+  {
+   "site_id": "A-003",
+   "county": "Adams",
+   "acres": 130,
+   "power_miles": 0.4,
+   "highway_miles": 0.2,
+   "latitude": 39.75,
+   "longitude": -104.6,
+   "geometry": {
+    "type": "Polygon",
+    "coordinates": [
+     [
+      [
+       -104.604237,
+       39.746742
+      ],
+      [
+       -104.595763,
+       39.746742
+      ],
+      [
+       -104.595763,
+       39.753258
+      ],
+      [
+       -104.604237,
+       39.753258
+      ],
+      [
+       -104.604237,
+       39.746742
+      ]
+     ]
+    ]
+   }
+  },
+  {
+   "site_id": "M-001",
+   "county": "Morgan",
+   "acres": 1200,
+   "power_miles": 1.8,
+   "highway_miles": 1.0,
+   "latitude": 40.26,
+   "longitude": -103.78,
+   "geometry": {
+    "type": "Polygon",
+    "coordinates": [
+     [
+      [
+       -103.79297,
+       40.250102
+      ],
+      [
+       -103.76703,
+       40.250102
+      ],
+      [
+       -103.76703,
+       40.269898
+      ],
+      [
+       -103.79297,
+       40.269898
+      ],
+      [
+       -103.79297,
+       40.250102
+      ]
+     ]
+    ]
+   }
+  },
+  {
+   "site_id": "M-002",
+   "county": "Morgan",
+   "acres": 400,
+   "power_miles": 5.5,
+   "highway_miles": 0.5,
+   "latitude": 40.23,
+   "longitude": -104.07,
+   "geometry": {
+    "type": "Polygon",
+    "coordinates": [
+     [
+      [
+       -104.077485,
+       40.224285
+      ],
+      [
+       -104.062515,
+       40.224285
+      ],
+      [
+       -104.062515,
+       40.235715
+      ],
+      [
+       -104.077485,
+       40.235715
+      ],
+      [
+       -104.077485,
+       40.224285
+      ]
+     ]
+    ]
+   }
+  }
+ ],
+ "places": [
+  {
+   "name": "Hudson",
+   "kind": "town",
+   "latitude": 40.0736,
+   "longitude": -104.643
+  },
+  {
+   "name": "Keenesburg",
+   "kind": "town",
+   "latitude": 40.1083,
+   "longitude": -104.5197
+  },
+  {
+   "name": "Greeley",
+   "kind": "town",
+   "latitude": 40.4233,
+   "longitude": -104.7091
+  },
+  {
+   "name": "Fort Lupton",
+   "kind": "town",
+   "latitude": 40.0847,
+   "longitude": -104.813
+  },
+  {
+   "name": "Platteville",
+   "kind": "town",
+   "latitude": 40.215,
+   "longitude": -104.8227
+  },
+  {
+   "name": "Brighton",
+   "kind": "town",
+   "latitude": 39.9853,
+   "longitude": -104.8205
+  },
+  {
+   "name": "Bennett",
+   "kind": "town",
+   "latitude": 39.7589,
+   "longitude": -104.4275
+  },
+  {
+   "name": "Watkins",
+   "kind": "town",
+   "latitude": 39.7453,
+   "longitude": -104.6075
+  },
+  {
+   "name": "Fort Morgan",
+   "kind": "town",
+   "latitude": 40.2503,
+   "longitude": -103.8
+  },
+  {
+   "name": "Wiggins",
+   "kind": "town",
+   "latitude": 40.2306,
+   "longitude": -104.0727
+  }
+ ]
+}

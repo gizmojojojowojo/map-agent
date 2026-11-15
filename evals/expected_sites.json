@@ -1,0 +1,205 @@
+{
+ "size-county": [
+  "W-001",
+  "W-003",
+  "W-006"
+ ],
+ "power-county": [
+  "A-001",
+  "A-003"
+ ],
+ "near-hudson": [
+  "W-001",
+  "W-002"
+ ],
+ "largest-morgan": [
+  "M-001",
+  "M-002"
+ ],
+ "size-range-highway": [
+  "A-003"
+ ],
+ "near-keenesburg": [
+  "W-001",
+  "W-002",
+  "W-003",
+  "W-004"
+ ],
+ "size-power": [
+  "M-001",
+  "W-003"
+ ],
+ "near-fort-morgan": [
+  "M-001"
+ ],
+ "two-counties-highway": [
+  "A-001",
+  "A-002",
+  "W-001",
+  "W-003",
+  "W-006"
+ ],
+ "unknown-place": [],
+ "refuse-capacity": [],
+ "refuse-ownership": [],
+ "power-sorted": [
+  "W-001",
+  "W-005",
+  "W-007"
+ ],
+ "small-sites": [
+  "W-002",
+  "W-007"
+ ],
+ "near-brighton": [
+  "A-001",
+  "W-007"
+ ],
+ "near-greeley-empty": [],
+ "power-and-highway": [
+  "A-003"
+ ],
+ "morgan-large": [
+  "M-001"
+ ],
+ "no-match": [],
+ "near-bennett": [
+  "A-002"
+ ],
+ "near-wiggins": [
+  "M-002"
+ ],
+ "three-counties": [
+  "A-002",
+  "M-001",
+  "W-003",
+  "W-006"
+ ],
+ "highway-sorted": [
+  "A-002",
+  "A-003"
+ ],
+ "range-county": [
+  "W-001",
+  "W-004",
+  "W-005"
+ ],
+ "lowercase-place": [
+  "W-007"
+ ],
+ "very-large": [
+  "A-002",
+  "M-001",
+  "W-003"
+ ],
+ "highway-close": [
+  "A-003"
+ ],
+ "refuse-price": [],
+ "refuse-zoning": [],
+ "refuse-fiber": [],
+ "unit-half-section": [
+  "M-001",
+  "M-002"
+ ],
+ "unit-quarter-section": [
+  "A-003",
+  "W-002",
+  "W-005",
+  "W-007"
+ ],
+ "unit-square-mile": [
+  "A-002",
+  "M-001",
+  "W-003"
+ ],
+ "unit-kilometres": [
+  "A-001",
+  "A-003",
+  "W-001",
+  "W-005",
+  "W-007"
+ ],
+ "inclusive-boundary": [
+  "A-002",
+  "M-001",
+  "M-002",
+  "W-003",
+  "W-006"
+ ],
+ "exclusive-boundary": [
+  "A-002",
+  "M-001",
+  "W-003",
+  "W-006"
+ ],
+ "typo-place": [
+  "W-001",
+  "W-002",
+  "W-003",
+  "W-004"
+ ],
+ "abbreviated-place": [
+  "M-001"
+ ],
+ "abbreviated-county": [
+  "W-001",
+  "W-003",
+  "W-006"
+ ],
+ "coordinates-given": [
+  "W-007"
+ ],
+ "top-three": [
+  "A-002",
+  "M-001",
+  "W-003"
+ ],
+ "single-nearest": [
+  "W-005"
+ ],
+ "count-all": [
+  "A-001",
+  "A-002",
+  "A-003",
+  "M-001",
+  "M-002",
+  "W-001",
+  "W-002",
+  "W-003",
+  "W-004",
+  "W-005",
+  "W-006",
+  "W-007"
+ ],
+ "conditional-stop": [
+  "A-002"
+ ],
+ "conditional-widen": [
+  "W-005"
+ ],
+ "vague-size": [],
+ "radius-and-size": [
+  "W-001",
+  "W-003"
+ ],
+ "radius-and-power": [
+  "A-001"
+ ],
+ "exclude-county": [
+  "A-001",
+  "A-002",
+  "M-001",
+  "M-002"
+ ],
+ "minimum-distance": [
+  "W-005"
+ ],
+ "injection": [],
+ "injection-with-task": [
+  "W-001",
+  "W-003",
+  "W-006"
+ ],
+ "off-topic": []
+}

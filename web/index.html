@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Map agent</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<style>
+  body { margin: 0; font: 15px/1.5 system-ui, sans-serif; display: grid; grid-template-columns: 360px 1fr; height: 100vh; }
+  aside { padding: 16px; overflow: auto; border-right: 1px solid #ddd; }
+  #map { height: 100vh; }
+  form { display: flex; gap: 8px; }
+  input { flex: 1; padding: 8px; font: inherit; }
+  button { padding: 8px 12px; font: inherit; }
+  #answer { margin: 16px 0 8px; }
+  #boundary, #trace { color: #555; font-size: 13px; }
+  #trace { white-space: pre-wrap; font-family: ui-monospace, monospace; }
+  @media (max-width: 700px) { body { grid-template-columns: 1fr; grid-template-rows: auto 1fr; } #map { height: 60vh; } }
+</style>
+</head>
+<body>
+<aside>
+  <form id="ask">
+    <input id="question" maxlength="400" required aria-label="Question" placeholder="Sites over 300 acres in Weld County">
+    <button>Ask</button>
+  </form>
+  <p id="answer" role="status"></p>
+  <p id="boundary"></p>
+  <div id="trace"></div>
+</aside>
+<div id="map"></div>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+const map = L.map('map').setView([40.1, -104.5], 9);
+L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 18, attribution: '&copy; OpenStreetMap contributors' }).addTo(map);
+let layer;
+const $ = id => document.getElementById(id);
+$('ask').addEventListener('submit', async event => {
+  event.preventDefault();
+  $('answer').textContent = 'Working…';
+  $('boundary').textContent = $('trace').textContent = '';
+  try {
+    const response = await fetch('/agent/ask', { method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ question: $('question').value }) });
+    if (!response.ok) throw new Error(`Request failed (${response.status})`);
+    const result = await response.json();
+    $('answer').textContent = result.answer;
+    $('boundary').textContent = result.evidence_boundary;
+    $('trace').textContent = result.trace.map(s => `${s.tool} ${JSON.stringify(s.args)}${s.error ? ' -> ' + s.error : ''}`).join('\n');
+    if (layer) layer.remove();
+    layer = L.geoJSON(result.features, { onEachFeature: (f, l) => l.bindPopup(`${f.id}: ${f.properties.acres} acres, ${f.properties.county} County`) }).addTo(map);
+    if (result.features.features.length) map.fitBounds(layer.getBounds(), { maxZoom: 12, padding: [30, 30] });
+  } catch (error) {
+    $('answer').textContent = `${error.message}. Try again.`;
+  }
+});
+</script>
+</body>
+</html>
