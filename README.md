@@ -75,8 +75,11 @@ After changing the data, run `python -m evals.run --freeze` to recompute the exp
 | Model | Version | Core | Hard |
 |---|---|---|---|
 | claude-haiku-5-5 | First version | 30 of 30 | 15 of 23 |
+| claude-haiku-5-5 | Second version | 27 of 30 | 21 of 23 |
 
 The eight hard failures in the first version led to four changes: shared filters on `sites_near`, county exclusion, minimum distances, and tolerant place lookup. The system prompt also now tells the agent to ask about vague sizes and distances.
+
+In the second run, all five misses showed the correct sites. The agent passed values such as 300.01 for "over 300 acres", which the size filter's description now recommends, and the scorer expected exactly 300. The expected inputs for "over" and "under" questions now accept either form.
 
 ## Project status
 
