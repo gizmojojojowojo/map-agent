@@ -6,16 +6,21 @@
 <title>Map agent</title>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
 <style>
-  body { margin: 0; font: 15px/1.5 system-ui, sans-serif; display: grid; grid-template-columns: 360px 1fr; height: 100vh; }
-  aside { padding: 16px; overflow: auto; border-right: 1px solid #ddd; }
-  #map { height: 100vh; }
+  html, body { height: 100%; }
+  body { margin: 0; font: 15px/1.5 system-ui, sans-serif; display: flex; }
+  aside { flex: 0 0 360px; box-sizing: border-box; padding: 16px; overflow: auto; border-right: 1px solid #ddd; }
+  #map { flex: 1 1 auto; min-width: 0; min-height: 0; }
   form { display: flex; gap: 8px; }
-  input { flex: 1; padding: 8px; font: inherit; }
-  button { padding: 8px 12px; font: inherit; }
+  input { flex: 1 1 auto; min-width: 0; box-sizing: border-box; padding: 8px; font: inherit; }
+  button { flex: none; padding: 8px 12px; font: inherit; }
   #answer { margin: 16px 0 8px; }
   #boundary, #trace { color: #555; font-size: 13px; }
-  #trace { white-space: pre-wrap; font-family: ui-monospace, monospace; }
-  @media (max-width: 700px) { body { grid-template-columns: 1fr; grid-template-rows: auto 1fr; } #map { height: 60vh; } }
+  #trace { white-space: pre-wrap; overflow-wrap: anywhere; font-family: ui-monospace, monospace; }
+  @media (max-width: 700px) {
+    body { flex-direction: column; }
+    aside { flex: 0 0 auto; max-height: 50%; border-right: 0; border-bottom: 1px solid #ddd; }
+    #map { min-height: 280px; }
+  }
 </style>
 </head>
 <body>
@@ -33,6 +38,8 @@
 <script>
 const map = L.map('map').setView([40.1, -104.5], 9);
 L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 18, attribution: '&copy; OpenStreetMap contributors' }).addTo(map);
+// Leaflet measures its container once. Re-measure whenever the layout changes its size.
+new ResizeObserver(() => map.invalidateSize()).observe(document.getElementById('map'));
 let layer;
 const $ = id => document.getElementById(id);
 $('ask').addEventListener('submit', async event => {
