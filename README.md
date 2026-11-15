@@ -81,14 +81,17 @@ After changing the data, run `python -m evals.run --freeze` to recompute the exp
 | claude-haiku-5-5 | First version | 30 of 30 | 15 of 23 | |
 | claude-haiku-5-5 | Second version | 27 of 30 | 21 of 23 | |
 | claude-haiku-5-5 | Third version | 30 of 30 | 23 of 23 | 7 of 12 |
+| claude-haiku-5-5 | Fourth version | 30 of 30 | 23 of 23 | 12 of 12 |
 
 The eight hard failures in the first version led to four changes: shared filters on `sites_near`, county exclusion, minimum distances, and tolerant place lookup. The system prompt also now tells the agent to ask about vague sizes and distances.
 
 In the second run, all five misses showed the correct sites. The agent passed values such as 300.01 for "over 300 acres", which the size filter's description now recommends, and the scorer expected exactly 300. The expected inputs for "over" and "under" questions now accept either form, which the third run confirms.
 
-Core and hard scores come from a single trial per question. The fresh score uses three trials.
+Scores through the third version come from a single trial per question, except the fresh score, which uses three. The fourth version uses three trials throughout, and every question passed all three.
 
 The fresh set scored 7 of 12 on its first run, against 100% on the two sets the agent had been tuned on. The five misses had five causes: exclusive wording on distances, a result limit the agent set on its own, a place name with a state attached, a request for sites near either of two places, and a rounding error in the scorer. Each is addressed in the fourth version.
+
+All three sets have now guided fixes, so these scores confirm the fixes and say little about unseen wording. The next measure of that needs new questions written before any further tuning.
 
 ## Project status
 
