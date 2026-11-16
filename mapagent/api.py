@@ -1,6 +1,9 @@
 """HTTP API: POST /agent/ask, plus the demo map page at /.
 
 Run: uvicorn mapagent.api:app --reload
+
+Questions are rate limited (see mapagent/limits.py). Behind a proxy that sets
+X-Forwarded-For, such as Render, set MAP_AGENT_TRUST_PROXY=1 so limits apply per visitor.
 """
 import logging
 import os
@@ -8,16 +11,18 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Annotated
 
-from fastapi import FastAPI, HTTPException
-from fastapi.responses import FileResponse
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel, Field
 
 from . import agent, providers
+from .limits import Limited, Limiter
 from .store import MemoryStore, PostgisStore
 
 WEB = Path(__file__).resolve().parents[1] / "web"
 app = FastAPI(title="Map agent")
 log = logging.getLogger("uvicorn.error")
+limiter = Limiter.from_env()
 
 
 class AskRequest(BaseModel):
@@ -38,13 +43,31 @@ def provider():
     return providers.get(os.environ.get("MAP_AGENT_PROVIDER", "claude"))
 
 
+def client_id(request: Request):
+    if os.environ.get("MAP_AGENT_TRUST_PROXY") == "1":
+        forwarded = request.headers.get("x-forwarded-for", "")
+        if forwarded:
+            return forwarded.split(",")[0].strip()
+    return request.client.host if request.client else "unknown"
+
+
+@app.get("/health", include_in_schema=False)
+def health():
+    store()  # fails if the database is unreachable
+    return {"ok": True}
+
+
 @app.get("/", include_in_schema=False)
 def home():
     return FileResponse(WEB / "index.html")
 
 
 @app.post("/agent/ask")
-def ask(request: AskRequest):
+def ask(request: AskRequest, http: Request):
+    try:
+        limiter.check(client_id(http))
+    except Limited as error:
+        return JSONResponse({"detail": str(error)}, status_code=429, headers={"Retry-After": str(error.retry_after)})
     try:
         return agent.ask(request.question, store(), provider())
     except ValueError as error:

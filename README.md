@@ -78,6 +78,20 @@ Searches by size and distance return the same sites as the in-memory store. Radi
 
 With the fixture loaded, `python -m pytest` also checks that every expected tool call in the evals returns the same sites from PostGIS as from the in-memory store. Those tests are skipped when no database is set or when it holds other data.
 
+### Limits for a public deployment
+
+Each question costs a model call, so the API limits how many it answers:
+
+| Setting | Default | Meaning |
+|---|---|---|
+| `MAP_AGENT_LIMIT_PER_HOUR` | 20 | Questions per visitor in any rolling hour |
+| `MAP_AGENT_LIMIT_PER_DAY` | 300 | Questions in total per UTC day, across all visitors |
+| `MAP_AGENT_TRUST_PROXY` | unset | Set to `1` behind a proxy such as Render, so visitors are told apart by `X-Forwarded-For` |
+
+A refused question gets a 429 with a plain message and a `Retry-After` header. Counts are kept in memory, so they assume one server process and reset on restart. The daily cap is what bounds spend; a visitor can dodge the hourly limit by faking `X-Forwarded-For`, but not the daily one. Set a monthly spend limit in the Anthropic console as well.
+
+`GET /health` returns `{"ok": true}` once the data store is reachable.
+
 ## Tests
 
 ```bash
@@ -173,4 +187,3 @@ With real data, the geocoder knows every Colorado city, town, and census-designa
 - Load parcels for neighbouring counties, so towns near the Weld line return sites on both sides
 - Publish eval results for Claude and OpenAI models
 - Add tools for point lookup, drawn areas, and context layers
-- Add rate limiting before any public deployment
