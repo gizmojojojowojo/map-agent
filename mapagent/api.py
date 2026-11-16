@@ -7,6 +7,8 @@ X-Forwarded-For, such as Render, set MAP_AGENT_TRUST_PROXY=1 so limits apply per
 """
 import logging
 import os
+import re
+import traceback
 from functools import lru_cache
 from pathlib import Path
 from typing import Annotated
@@ -43,6 +45,14 @@ def provider():
     return providers.get(os.environ.get("MAP_AGENT_PROVIDER", "claude"))
 
 
+SECRET = re.compile(r"(sk-[A-Za-z0-9]+-)[A-Za-z0-9_\-]+")
+
+
+def redact(text):
+    """Hide API keys. Some client errors quote the request headers, key included."""
+    return SECRET.sub(r"\1[redacted]", text)
+
+
 def client_id(request: Request):
     if os.environ.get("MAP_AGENT_TRUST_PROXY") == "1":
         forwarded = request.headers.get("x-forwarded-for", "")
@@ -75,7 +85,7 @@ def ask(request: AskRequest, http: Request):
         raise HTTPException(422, str(error)) from None
     except Exception as error:  # report the cause instead of a bare 500; full detail goes to the log
         limiter.refund(client)  # a failed model request should not use up the visitor's or the day's limit
-        log.exception("Question failed")
+        log.error("Question failed\n%s", redact("".join(traceback.format_exception(error))))
         name = type(error).__name__
         hint = " Check the API key the server was started with." if "Auth" in name or "api_key" in str(error) else ""
         raise HTTPException(502, f"The model request failed ({name}).{hint} The server log has the details.") from None

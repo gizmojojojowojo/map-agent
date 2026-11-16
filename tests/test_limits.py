@@ -53,3 +53,9 @@ def test_refund_gives_back_a_failed_question():
     limiter.check("a")
     with pytest.raises(Limited):
         limiter.check("a")
+
+
+def test_redact_hides_api_keys_in_logged_errors():
+    from mapagent.api import redact
+    text = "Illegal header value b'Bearer sk-ant-api03-AbC_d-123xyz\\n' and x-api-key: sk-proj-QQQ999"
+    assert redact(text) == "Illegal header value b'Bearer sk-ant-[redacted]\\n' and x-api-key: sk-proj-[redacted]"

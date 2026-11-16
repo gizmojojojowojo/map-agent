@@ -12,7 +12,8 @@ class ClaudeProvider:
 
     def __init__(self, model=None, max_tokens=1024):
         import anthropic
-        self.client = anthropic.Anthropic()
+        key = os.environ.get("ANTHROPIC_API_KEY", "").strip()  # a pasted key often carries a trailing newline
+        self.client = anthropic.Anthropic(api_key=key) if key else anthropic.Anthropic()
         self.model = model or os.environ.get("MAP_AGENT_CLAUDE_MODEL", DEFAULT_CLAUDE_MODEL)
         self.max_tokens = max_tokens
 
