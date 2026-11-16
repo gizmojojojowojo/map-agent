@@ -55,11 +55,27 @@ Evals and tests always use the fixture, so their results do not change when the 
 
 ### Use PostGIS
 
+On a Mac with [Postgres.app](https://postgresapp.com), one script starts a private PostGIS server for this project. It keeps its data in `.pgdata`, which git ignores, listens on a local socket at port 5433, and leaves any other Postgres server alone. It prints the database URL to export.
+
+```bash
+eval "$(./scripts/local_postgis.sh)"
+python scripts/load_data.py data/weld.json   # or no argument for the fixture
+uvicorn mapagent.api:app --reload
+```
+
+With another PostGIS install, create the schema yourself and point `MAP_AGENT_DATABASE_URL` at it:
+
 ```bash
 createdb map_agent && psql map_agent -c "CREATE EXTENSION postgis" -c "CREATE EXTENSION pg_trgm" -f sql/001_schema.sql
 export MAP_AGENT_DATABASE_URL=postgresql://localhost/map_agent
-python scripts/load_fixture.py
+python scripts/load_data.py
 ```
+
+`load_data.py` replaces whatever the tables hold. It loads the 8,135 real Weld parcels in about a second. The store opens its connection read-only, so the agent cannot change data.
+
+Searches by size and distance return the same sites as the in-memory store. Radius searches can differ near the edge of the radius: PostGIS measures to the parcel boundary, and the in-memory store measures to its centre point.
+
+With the fixture loaded, `python -m pytest` also checks that every expected tool call in the evals returns the same sites from PostGIS as from the in-memory store. Those tests are skipped when no database is set or when it holds other data.
 
 ## Tests
 
@@ -113,11 +129,14 @@ All three sets have now guided fixes, so these scores confirm the fixes and say 
 
 ## Project status
 
-The agent loop, tools, eval scoring, and fixture store are covered by tests. The Claude provider has passed a live eval run. The OpenAI provider, HTTP API, PostGIS store, and map page are written and awaiting their first live run.
+The agent loop, tools, eval scoring, and fixture store are covered by tests. The Claude provider has passed a live eval run. The HTTP API and map page run end to end on the fixture and on real Weld County parcels. The PostGIS store matches the in-memory store on every eval query and answers live questions on the real parcels. The OpenAI provider is written and awaiting its first live run.
+
+Only the 10 towns in the fixture can be geocoded, so questions about other Weld towns, such as Eaton, get a request for clarification.
 
 ## Roadmap
 
-- Load open county parcel data in place of the fixture
+- Load Colorado towns into the geocoder
+- Write fresh eval questions against the real Weld parcels
 - Publish eval results for Claude and OpenAI models
 - Add tools for point lookup, drawn areas, and context layers
 - Add rate limiting before any public deployment
