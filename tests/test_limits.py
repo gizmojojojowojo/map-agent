@@ -44,3 +44,12 @@ def test_refused_questions_are_not_counted():
         with pytest.raises(Limited):
             limiter.check("a")
     limiter.check("b")
+
+
+def test_refund_gives_back_a_failed_question():
+    limiter = Limiter(per_client=1, per_day=1, clock=Clock())
+    limiter.check("a")
+    limiter.refund("a")
+    limiter.check("a")
+    with pytest.raises(Limited):
+        limiter.check("a")

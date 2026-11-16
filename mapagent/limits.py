@@ -53,3 +53,10 @@ class Limiter:
             if len(self.recent) > 10_000:  # drop idle clients so memory stays bounded
                 for key in [k for k, v in self.recent.items() if not v or v[-1] <= now - 3600]:
                     del self.recent[key]
+
+    def refund(self, client):
+        """Uncount the client's latest question, for one the server failed to answer."""
+        with self.lock:
+            if self.recent.get(client):
+                self.recent[client].pop()
+                self.today = max(0, self.today - 1)

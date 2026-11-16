@@ -64,8 +64,9 @@ def home():
 
 @app.post("/agent/ask")
 def ask(request: AskRequest, http: Request):
+    client = client_id(http)
     try:
-        limiter.check(client_id(http))
+        limiter.check(client)
     except Limited as error:
         return JSONResponse({"detail": str(error)}, status_code=429, headers={"Retry-After": str(error.retry_after)})
     try:
@@ -73,6 +74,7 @@ def ask(request: AskRequest, http: Request):
     except ValueError as error:
         raise HTTPException(422, str(error)) from None
     except Exception as error:  # report the cause instead of a bare 500; full detail goes to the log
+        limiter.refund(client)  # a failed model request should not use up the visitor's or the day's limit
         log.exception("Question failed")
         name = type(error).__name__
         hint = " Check the API key the server was started with." if "Auth" in name or "api_key" in str(error) else ""

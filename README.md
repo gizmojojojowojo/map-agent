@@ -100,7 +100,7 @@ Each question costs a model call, so the API limits how many it answers:
 | `MAP_AGENT_LIMIT_PER_DAY` | 300 | Questions in total per UTC day, across all visitors |
 | `MAP_AGENT_TRUST_PROXY` | unset | Set to `1` behind a proxy such as Render, so visitors are told apart by `X-Forwarded-For` |
 
-A refused question gets a 429 with a plain message and a `Retry-After` header. Counts are kept in memory, so they assume one server process and reset on restart. The daily cap is what bounds spend; a visitor can dodge the hourly limit by faking `X-Forwarded-For`, but not the daily one. Set a monthly spend limit in the Anthropic console as well.
+A refused question gets a 429 with a plain message and a `Retry-After` header. A question the server fails to answer, such as when the model request fails, is not counted. Counts are kept in memory, so they assume one server process and reset on restart. The daily cap is what bounds spend; a visitor can dodge the hourly limit by faking `X-Forwarded-For`, but not the daily one. Set a monthly spend limit in the Anthropic console as well.
 
 `GET /health` returns `{"ok": true}` once the data store is reachable.
 
