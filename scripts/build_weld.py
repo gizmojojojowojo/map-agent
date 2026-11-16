@@ -91,7 +91,7 @@ def main():
     parcels = frame(arcgis_features(PARCELS, "parcels", where=f"countyName = 'Weld' AND landAcres >= {options.min_acres * 0.8:g}",
                                     outFields="parcel_id,landAcres"), "parcels")
     print("Downloading transmission lines", file=sys.stderr)
-    lines = frame(arcgis_features(TRANSMISSION, "transmission segments", where="1=1", outFields="OBJECTID", **envelope),
+    lines = frame(arcgis_features(TRANSMISSION, "transmission segments", where="1=1", outFields="ID,VOLTAGE", **envelope),
                   "transmission lines")
     print("Downloading highways", file=sys.stderr)
     highways = frame(fetch_json(HIGHWAYS).get("features", []), "highways").cx[west:east, south:north]
