@@ -45,7 +45,8 @@ MILE_M = 1609.344
 PAGE = 1000
 
 
-def fetch_json(url, params=None, attempts=3):
+def fetch_json(url, params=None, attempts=5):
+    """GET JSON, retrying for about two minutes; public GIS servers drop connections now and then."""
     full = f"{url}?{urllib.parse.urlencode(params)}" if params else url
     for attempt in range(1, attempts + 1):
         try:
@@ -57,7 +58,9 @@ def fetch_json(url, params=None, attempts=3):
         except Exception as error:  # retry network hiccups, then report which source failed
             if attempt == attempts:
                 raise SystemExit(f"Could not read {url}\n  {error}") from None
-            time.sleep(2 * attempt)
+            wait = (5, 15, 30, 60)[min(attempt, 4) - 1]
+            print(f"  retrying in {wait}s after: {error}", file=sys.stderr, flush=True)
+            time.sleep(wait)
 
 
 def arcgis_features(url, label, **query):
