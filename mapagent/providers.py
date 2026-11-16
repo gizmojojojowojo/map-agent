@@ -10,7 +10,7 @@ DEFAULT_CLAUDE_MODEL = "claude-haiku-5-5"
 class ClaudeProvider:
     """Anthropic Messages API with tool use. Needs ANTHROPIC_API_KEY in the environment."""
 
-    def __init__(self, model=None, max_tokens=1024):
+    def __init__(self, model=None, max_tokens=4096):  # thinking counts toward max_tokens on current models
         import anthropic
         key = os.environ.get("ANTHROPIC_API_KEY", "").strip()  # a pasted key often carries a trailing newline
         self.client = anthropic.Anthropic(api_key=key) if key else anthropic.Anthropic()
@@ -23,7 +23,8 @@ class ClaudeProvider:
             tools=tool_specs, messages=[self._convert(m) for m in messages])
         text = "".join(b.text for b in response.content if b.type == "text")
         calls = [Call(b.id, b.name, dict(b.input)) for b in response.content if b.type == "tool_use"]
-        return Turn(text, calls)
+        usage = {"input_tokens": response.usage.input_tokens, "output_tokens": response.usage.output_tokens}
+        return Turn(text, calls, usage)
 
     @staticmethod
     def _convert(message):
@@ -51,7 +52,9 @@ class OpenAIProvider:
             messages=[{"role": "system", "content": system}, *(m for message in messages for m in self._convert(message))])
         message = response.choices[0].message
         calls = [Call(c.id, c.function.name, self._arguments(c.function.arguments)) for c in message.tool_calls or []]
-        return Turn(message.content or "", calls)
+        usage = ({"input_tokens": response.usage.prompt_tokens, "output_tokens": response.usage.completion_tokens}
+                 if response.usage else {})
+        return Turn(message.content or "", calls, usage)
 
     @staticmethod
     def tools(tool_specs):
@@ -90,9 +93,9 @@ class ScriptedProvider:
         return step(messages) if callable(step) else step
 
 
-def get(name):
+def get(name, model=None):
     if name == "claude":
-        return ClaudeProvider()
+        return ClaudeProvider(model)
     if name == "openai":
-        return OpenAIProvider()
+        return OpenAIProvider(model)
     raise ValueError(f"Unknown provider {name}. Available: claude, openai.")

@@ -171,13 +171,17 @@ def test_approximate_inputs_and_report():
     assert evals.same({"approx": 1.243, "tolerance": 0.1}, 1.2)
     assert not evals.same({"approx": 1.243, "tolerance": 0.1}, 2)
     assert not evals.same({"approx": 1.243, "tolerance": 0.1}, "1.2")
+    totals = {"model_calls": 2, "input_tokens": 3000, "output_tokens": 200}
     rows = [{"id": "a", "set": "core", "calls": True, "sites": True, "complete": True, "made": [], "shown": [],
-             "passes": 1, "trials": 1},
+             "passes": 1, "trials": 1, "seconds": [2.0], "totals": totals},
             {"id": "b", "set": "hard", "calls": False, "sites": True, "complete": True,
-             "made": [{"tool": "search_sites", "args": {}}], "shown": ["W-001"], "passes": 0, "trials": 1}]
-    text = evals.report(rows, "claude")
+             "made": [{"tool": "search_sites", "args": {}}], "shown": ["W-001"], "passes": 0, "trials": 1,
+             "seconds": [4.0], "totals": totals}]
+    text = evals.report(rows, "claude", "claude-sonnet-5-5")
     assert "claude core: 1 of 1 passed, 100%" in text and "claude hard: 0 of 1 passed, 0%" in text
     assert 'made:  [{"tool": "search_sites", "args": {}}]' in text
+    # Sonnet 5.5: 3,000 input tokens at $2/M plus 200 output at $10/M is $0.008 per answer
+    assert "claude-sonnet-5-5: 3.0s mean" in text and "$8.00 per 1,000 answers, $0.02 this run" in text
 
 
 def test_trials_report_flaky_questions():

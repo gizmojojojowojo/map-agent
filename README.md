@@ -188,6 +188,34 @@ On the second run the only miss was flaky: in one of three trials, "Who owns the
 
 The geocoder fix came from this set, so the next unseen-wording measure needs new questions again.
 
+### Model comparison
+
+All 88 questions (65 fixture, 23 real Weld) on three Claude models, November 2026:
+
+| Model | Trials per question | Trials passed | Questions passed every trial | Mean time per answer | Tokens per answer (in / out) | Cost per 1,000 answers |
+|---|---|---|---|---|---|---|
+| `claude-haiku-5-5` | 3 | 259 of 264 (98%) | 85 of 88 | 2.5s | 7,800 / 340 | $0.95 |
+| `claude-sonnet-5-5` | 1 | 88 of 88 (100%) | 88 of 88 | 3.2s | 7,760 / 280 | $18.32 |
+| `claude-opus-5-5` | 1 | 88 of 88 (100%) | 88 of 88 | 3.8s | 7,750 / 260 | $36.29 |
+
+Cost uses Anthropic's first-party prices per million tokens: Haiku $0.10 in and $0.50 out, Sonnet $2 and $10, Opus $4 and $20. Time is wall-clock from a laptop, including tool calls. Each model ran with its default effort.
+
+**Haiku stays the default.** It answers at about one nineteenth of Sonnet's cost and one thirty-eighth of Opus's, and it is the fastest. Its five failed trials share one habit: after a unit conversion (kilometres, hectares, feet), it sometimes runs the same search again with a slightly different number, such as 247.11 and then 247.12 acres. The map ends up showing the right sites, but the extra call fails the scorer's exact-calls check. A sixth question type, ownership, occasionally looks up the town before declining. Sonnet and Opus showed neither habit in their single trial each.
+
+At the demo's cap of 300 questions a day, the worst-case model bill is about $0.29 a day on Haiku, $5.50 on Sonnet, or $11 on Opus.
+
+Nearly all input tokens are the system prompt and tool definitions, sent on each of the two or three model calls per answer. Prompt caching could cut that input cost; it is not turned on yet.
+
+Sonnet and Opus ran one trial each. The three-trial runs for them stopped partway when the account ran out of credit, and only complete runs are reported. To rerun the comparison:
+
+```bash
+python -m evals.run --model claude-sonnet-5-5 --trials 3 --save evals/results/claude-sonnet-5-5-fixture.json
+python -m evals.run --model claude-sonnet-5-5 --data weld --trials 3 --save evals/results/claude-sonnet-5-5-weld.json
+python -m evals.compare
+```
+
+Saved runs in `evals/results/` are not committed. The real-data rows hold parcel IDs, which are rebuilt with the data.
+
 ## Project status
 
 The agent loop, tools, eval scoring, and fixture store are covered by tests. The Claude provider has passed a live eval run. The HTTP API and map page run end to end on the fixture and on real Weld County parcels. The PostGIS store matches the in-memory store on every eval query and answers live questions on the real parcels, where the agent passes 22 of 23 real-data eval questions. The OpenAI provider is written and awaiting its first live run.

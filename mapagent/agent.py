@@ -35,6 +35,7 @@ class Call:
 class Turn:
     text: str = ""
     calls: list[Call] = field(default_factory=list)
+    usage: dict = field(default_factory=dict)  # input_tokens and output_tokens, when the provider reports them
 
 
 class Provider(Protocol):
@@ -48,10 +49,14 @@ def ask(question, store, provider, max_steps=MAX_STEPS):
         raise ValueError(f"Question must be 1 to {MAX_QUESTION} characters.")
     messages = [{"role": "user", "text": question}]
     trace, features = [], []
+    usage = {"model_calls": 0, "input_tokens": 0, "output_tokens": 0}
     for _ in range(max_steps):
         turn = provider.complete(SYSTEM, messages, tools.specs())
+        usage["model_calls"] += 1
+        for key in ("input_tokens", "output_tokens"):
+            usage[key] += turn.usage.get(key, 0)
         if not turn.calls:
-            return _result(turn.text, trace, features, complete=True)
+            return _result(turn.text, trace, features, complete=True, usage=usage)
         messages.append({"role": "assistant", "text": turn.text, "calls": turn.calls})
         results = []
         for c in turn.calls:
@@ -63,10 +68,10 @@ def ask(question, store, provider, max_steps=MAX_STEPS):
             results.append({"id": c.id, "content": json.dumps(result)})
         messages.append({"role": "tool", "results": results})
     return _result("I could not finish this question in the allowed number of steps. Try a narrower question.",
-                   trace, features, complete=False)
+                   trace, features, complete=False, usage=usage)
 
 
-def _result(answer, trace, features, complete):
-    return {"answer": answer, "complete": complete, "trace": trace,
+def _result(answer, trace, features, complete, usage):
+    return {"answer": answer, "complete": complete, "trace": trace, "usage": usage,
             "features": {"type": "FeatureCollection", "features": features},
             "evidence_boundary": BOUNDARY}

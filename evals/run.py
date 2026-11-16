@@ -33,6 +33,7 @@ import argparse
 import json
 import os
 import sys
+import time
 from pathlib import Path
 
 from mapagent import agent, providers, tools
@@ -44,6 +45,8 @@ WELD_QUESTIONS = Path(__file__).with_name("weld_questions.json")
 WELD_DATA = Path(__file__).resolve().parents[1] / "data/weld.json"
 THRESHOLD = 0.85
 SETS = ("core", "hard", "fresh", "weld")
+# US$ per million input and output tokens (Anthropic first-party rates, November 2026).
+PRICES = {"claude-haiku-5-5": (0.10, 0.50), "claude-sonnet-5-5": (2.00, 10.00), "claude-opus-5-5": (4.00, 20.00)}
 
 
 def same(expected, actual):
@@ -114,11 +117,14 @@ def score(question, result, expected_ids):
 
 
 def attempt(provider, store, question, expected_ids):
+    started = time.perf_counter()
     try:
-        return score(question, agent.ask(question["question"], store, provider), expected_ids)
+        result = agent.ask(question["question"], store, provider)
+        row = {**score(question, result, expected_ids), "usage": result.get("usage", {})}
     except Exception as error:  # one failed request should not hide the other results
-        return {"id": question["id"], "set": question.get("set", "core"), "calls": False, "sites": False,
-                "complete": False, "made": [], "shown": [], "error": repr(error)}
+        row = {"id": question["id"], "set": question.get("set", "core"), "calls": False, "sites": False,
+               "complete": False, "made": [], "shown": [], "usage": {}, "error": repr(error)}
+    return {**row, "seconds": time.perf_counter() - started}
 
 
 def run(provider, store, questions, expected, trials=1):
@@ -129,7 +135,10 @@ def run(provider, store, questions, expected, trials=1):
         attempts = [attempt(provider, store, q, expected[q["id"]]) for _ in range(trials)]
         good = [a for a in attempts if ok(a)]
         shown = next((a for a in attempts if not ok(a)), attempts[0])
-        rows.append({**shown, "passes": len(good), "trials": trials})
+        totals = {key: sum(a["usage"].get(key, 0) for a in attempts)
+                  for key in ("model_calls", "input_tokens", "output_tokens")}
+        rows.append({**shown, "passes": len(good), "trials": trials, "seconds": [a["seconds"] for a in attempts],
+                     "totals": totals})
     return rows
 
 
@@ -146,7 +155,26 @@ def rate(rows):
     return sum(map(passed, rows)) / len(rows)
 
 
-def report(rows, provider):
+def cost(rows, model):
+    """US$ for every trial in rows, or None for a model with no listed price."""
+    if model not in PRICES:
+        return None
+    price_in, price_out = PRICES[model]
+    return sum(r["totals"]["input_tokens"] * price_in + r["totals"]["output_tokens"] * price_out for r in rows) / 1e6
+
+
+def summary(rows, model):
+    """Per-answer averages over every trial: seconds, tokens and US$."""
+    answers = sum(r["trials"] for r in rows)
+    seconds = sorted(s for r in rows for s in r["seconds"])
+    total = cost(rows, model)
+    return {"answers": answers, "mean_seconds": sum(seconds) / answers, "p90_seconds": seconds[int(0.9 * (answers - 1))],
+            "mean_input_tokens": sum(r["totals"]["input_tokens"] for r in rows) / answers,
+            "mean_output_tokens": sum(r["totals"]["output_tokens"] for r in rows) / answers,
+            "cost_per_answer": total / answers if total is not None else None, "total_cost": total}
+
+
+def report(rows, provider, model=None):
     lines = []
     for r in rows:
         label = "PASS" if passed(r) else "FAIL" if r["passes"] == 0 else "FLAKY"
@@ -163,12 +191,33 @@ def report(rows, provider):
             flaky = sum(0 < r["passes"] < r["trials"] for r in group)
             lines.append(f"{provider} {name}: {sum(map(passed, group))} of {len(group)} passed, {rate(group):.0%}{gate}"
                          + (f", {flaky} flaky" if flaky else ""))
+    stats = summary(rows, model)
+    price = f", ${stats['cost_per_answer'] * 1000:.2f} per 1,000 answers, ${stats['total_cost']:.2f} this run" \
+        if stats["cost_per_answer"] is not None else ""
+    lines.append(f"{model or provider}: {stats['mean_seconds']:.1f}s mean, {stats['p90_seconds']:.1f}s p90, "
+                 f"{stats['mean_input_tokens']:,.0f} input + {stats['mean_output_tokens']:,.0f} output tokens per answer{price}")
     return "\n".join(lines)
+
+
+def finish(options, store, questions, expected):
+    """Run the questions, print the report, and save the rows if asked."""
+    provider = providers.get(options.provider, options.model)
+    model = getattr(provider, "model", None)
+    rows = run(provider, store, questions, expected, options.trials)
+    print(report(rows, options.provider, model))
+    if options.save:
+        options.save.parent.mkdir(parents=True, exist_ok=True)
+        options.save.write_text(json.dumps({"provider": options.provider, "model": model, "data": options.data,
+                                            "trials": options.trials, "summary": summary(rows, model),
+                                            "rows": rows}, indent=1) + "\n")
+    return rows
 
 
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--provider", default="claude")
+    parser.add_argument("--model", help="model ID, e.g. claude-sonnet-5-5; defaults to the provider's default")
+    parser.add_argument("--save", type=Path, help="write per-question rows and the summary as JSON")
     parser.add_argument("--freeze", action="store_true")
     parser.add_argument("--data", choices=("fixture", "weld"), default="fixture",
                         help="weld: ask the real-data questions against real Weld parcels")
@@ -182,8 +231,7 @@ def main():
         questions = [{**q, "set": "weld"} for q in json.loads(WELD_QUESTIONS.read_text())]
         expected = {q["id"]: sorted(q["sites"]) if "sites" in q else expected_sites(store, q["calls"]) for q in questions}
         print(f"store: {'PostGIS' if url else WELD_DATA}", file=sys.stderr)
-        rows = run(providers.get(options.provider), store, questions, expected, options.trials)
-        print(report(rows, options.provider))
+        rows = finish(options, store, questions, expected)
         return
     store, questions = MemoryStore(), json.loads(QUESTIONS.read_text())
     if options.freeze:
@@ -193,8 +241,7 @@ def main():
         return
     if options.set:
         questions = [q for q in questions if q.get("set", "core") == options.set]
-    rows = run(providers.get(options.provider), store, questions, json.loads(EXPECTED.read_text()), options.trials)
-    print(report(rows, options.provider))
+    rows = finish(options, store, questions, json.loads(EXPECTED.read_text()))
     core = [r for r in rows if r["set"] == "core"]
     sys.exit(0 if not core or rate(core) >= THRESHOLD else 1)
 
