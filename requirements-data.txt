@@ -1,0 +1,4 @@
+# Only needed to build real data with scripts/build_weld.py
+geopandas>=1.0
+shapely>=2.0
+pyproj

@@ -35,6 +35,24 @@ Open http://127.0.0.1:8000 and ask a question.
 
 With no database configured, the app uses `data/fixture.json`. The fixture holds 12 invented parcels near real Colorado towns, for demos and tests.
 
+### Use real Weld County parcels
+
+```bash
+pip install -r requirements-data.txt
+python scripts/build_weld.py
+MAP_AGENT_DATA=data/weld.json uvicorn mapagent.api:app --reload
+```
+
+The build script downloads three public layers and keeps Weld County parcels of 80 acres or more:
+
+- Parcels: [Colorado Public Parcel Composite](https://gis.colorado.gov/public/rest/services/Address_and_Parcel/Colorado_Public_Parcels/FeatureServer/0), maintained by the Colorado Office of Information Technology from county data
+- Transmission lines: [HIFLD U.S. Transmission Lines](https://services3.arcgis.com/fwwoCWVtaahwlvxO/arcgis/rest/services/HIFLD_US_Transmission_Lines_with_ICF/FeatureServer/0)
+- Highways: [CDOT Highways in Colorado](https://data.colorado.gov/Transportation/Highways-in-Colorado/phvc-rwei)
+
+Acreage is measured from each parcel's geometry. Distances run from the parcel edge to the nearest mapped line. The output keeps the parcel ID, acreage, distances, and simplified geometry, and leaves out owner names and addresses. It is not committed to the repository.
+
+Evals and tests always use the fixture, so their results do not change when the source data does.
+
 ### Use PostGIS
 
 ```bash

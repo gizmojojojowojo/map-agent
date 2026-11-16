@@ -27,7 +27,10 @@ class AskRequest(BaseModel):
 @lru_cache
 def store():
     url = os.environ.get("MAP_AGENT_DATABASE_URL")
-    return PostgisStore(url) if url else MemoryStore()
+    if url:
+        return PostgisStore(url)
+    data = os.environ.get("MAP_AGENT_DATA")  # e.g. data/weld.json from scripts/build_weld.py
+    return MemoryStore(data) if data else MemoryStore()
 
 
 @lru_cache
