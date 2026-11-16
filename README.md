@@ -78,6 +78,18 @@ Searches by size and distance return the same sites as the in-memory store. Radi
 
 With the fixture loaded, `python -m pytest` also checks that every expected tool call in the evals returns the same sites from PostGIS as from the in-memory store. Those tests are skipped when no database is set or when it holds other data.
 
+### Live demo
+
+https://map-agent-pgfg.onrender.com runs on Render's free plan. Each deploy builds `data/weld.json` from the live sources, so the demo serves real Weld County parcels from memory. The service sleeps when idle, so the first question after a quiet spell can take about a minute.
+
+| Setting | Value |
+|---|---|
+| Build command | `pip install -r requirements.txt -r requirements-data.txt && python scripts/build_weld.py` |
+| Start command | `uvicorn mapagent.api:app --host 0.0.0.0 --port $PORT` |
+| Environment | `MAP_AGENT_DATA=data/weld.json`, `MAP_AGENT_TRUST_PROXY=1`, `PYTHON_VERSION=3.14.6`, and `ANTHROPIC_API_KEY` set in the Render dashboard |
+
+Every push to `main` redeploys. A deploy fails, and the previous one keeps serving, if a data source is down or has changed.
+
 ### Limits for a public deployment
 
 Each question costs a model call, so the API limits how many it answers:
