@@ -218,3 +218,12 @@ def test_geocode_returns_every_place_that_shares_a_name(tmp_path):
     path.write_text(json.dumps({"sites": [], "places": places}))
     found = MemoryStore(path).geocode("twin lakes")
     assert [(p["county"], p["match"]) for p in found] == [("Adams", "exact"), ("Lake", "exact")]
+
+
+def test_geocode_matches_a_name_in_parentheses(tmp_path):
+    path = tmp_path / "data.json"
+    path.write_text(json.dumps({"sites": [], "places": [
+        {"name": "Raymer (New Raymer)", "kind": "town", "county": "Weld", "latitude": 40.61, "longitude": -103.84}]}))
+    store = MemoryStore(path)
+    assert [p["match"] for p in store.geocode("New Raymer")] == ["exact"]
+    assert [p["match"] for p in store.geocode("raymer")] == ["exact"]

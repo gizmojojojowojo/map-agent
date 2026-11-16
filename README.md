@@ -52,7 +52,7 @@ The build script downloads three public layers and keeps Weld County parcels of 
 
 Acreage is measured from each parcel's geometry. Distances run from the parcel edge to the nearest mapped line. The output keeps the parcel ID, acreage, distances, and simplified geometry, and leaves out owner names and addresses. It is not committed to the repository.
 
-Evals and tests always use the fixture, so their results do not change when the source data does.
+Tests and the main evals use the fixture, so their results do not change when the source data does. A separate eval set runs against the real parcels; see [Real Weld data](#real-weld-data-23-questions).
 
 ### Use PostGIS
 
@@ -128,15 +128,49 @@ The fresh set scored 7 of 12 on its first run, against 100% on the two sets the 
 
 All three sets have now guided fixes, so these scores confirm the fixes and say little about unseen wording. The next measure of that needs new questions written before any further tuning.
 
+### Real Weld data (23 questions)
+
+```bash
+eval "$(./scripts/local_postgis.sh)"   # or leave MAP_AGENT_DATABASE_URL unset to use data/weld.json
+python -m evals.run --provider claude --data weld --trials 3
+```
+
+`evals/weld_questions.json` holds 23 questions written for the real parcels before any run against them. They cover:
+
+- towns that are not in the fixture, such as Eaton, Nunn, Kersey, and Wellington, which is in Larimer County
+- spellings that differ from the Census: Ft Lupton, LaSalle, New Raymer, and a misspelled Milliken
+- a place name shared by two Colorado towns (Glendale)
+- a county with no loaded parcels
+- unit conversions: square miles, square kilometres, and feet
+- top-N sorts over thousands of parcels
+- questions the data cannot answer, such as capacity, ownership, and lookup by parcel ID
+
+Real data is rebuilt from live sources and is not committed, so expected sites are not frozen. The runner computes them at run time by running each question's expected calls on the same store the agent queries. The score measures whether the agent asked the right question of the data, not whether the data is right.
+
+| Model | Store | Run | Weld |
+|---|---|---|---|
+| claude-haiku-5-5 | PostGIS | First run | 19 of 23 |
+| claude-haiku-5-5 | PostGIS | After two fixes | 22 of 23 |
+
+The first run had four misses:
+
+- **Three towns in one question.** The agent was right; the scorer was wrong. It geocoded the first town three times when computing the expected sites. Each lookup now starts from a different town.
+- **"Milikin".** The PostGIS geocoder used trigram similarity, which scores Milikin against Milliken at 0.31, under its 0.5 cut-off. The in-memory geocoder found it. The in-memory geocoder in turn missed "New Raymer", which the Census lists as "Raymer (New Raymer)". Both stores now share one matcher in Python, and a name in parentheses counts as an alternate name.
+- **Two flaky questions.** For "within 1 km of a power line", one trial added a sort by distance to power, which changes which 20 matching parcels are shown. For "within 1,500 feet", one trial repeated its search. Neither was changed, and both passed every trial on the second run.
+
+On the second run the only miss was flaky: in one of three trials, "Who owns the biggest parcel near Greeley?" looked up Greeley before saying ownership is not in the data. It passed every trial on the first run. After the geocoder change, the fixture sets still pass 30 of 30, 23 of 23, and 12 of 12 on one trial each.
+
+The geocoder fix came from this set, so the next unseen-wording measure needs new questions again.
+
 ## Project status
 
-The agent loop, tools, eval scoring, and fixture store are covered by tests. The Claude provider has passed a live eval run. The HTTP API and map page run end to end on the fixture and on real Weld County parcels. The PostGIS store matches the in-memory store on every eval query and answers live questions on the real parcels. The OpenAI provider is written and awaiting its first live run.
+The agent loop, tools, eval scoring, and fixture store are covered by tests. The Claude provider has passed a live eval run. The HTTP API and map page run end to end on the fixture and on real Weld County parcels. The PostGIS store matches the in-memory store on every eval query and answers live questions on the real parcels, where the agent passes 22 of 23 real-data eval questions. The OpenAI provider is written and awaiting its first live run.
 
 With real data, the geocoder knows every Colorado city, town, and census-designated place. When two places share a name, such as the Twin Lakes in Adams and Lake counties, it returns both with their counties, and the agent asks which one is meant.
 
 ## Roadmap
 
-- Write fresh eval questions against the real Weld parcels
+- Load parcels for neighbouring counties, so towns near the Weld line return sites on both sides
 - Publish eval results for Claude and OpenAI models
 - Add tools for point lookup, drawn areas, and context layers
 - Add rate limiting before any public deployment

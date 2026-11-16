@@ -21,19 +21,29 @@ Usage:
     python -m evals.run --provider claude     # needs ANTHROPIC_API_KEY
     python -m evals.run --provider claude --set fresh --trials 3
     python -m evals.run --freeze              # recompute expected site IDs after a data change
+    python -m evals.run --data weld --trials 3  # real Weld parcels; see below
+
+--data weld asks evals/weld_questions.json against real Weld County parcels: the
+PostGIS database when MAP_AGENT_DATABASE_URL is set, otherwise data/weld.json.
+Real data is rebuilt from live sources and is not committed, so expected sites are
+not frozen. They are computed at run time by running the expected calls on the
+same store the agent uses.
 """
 import argparse
 import json
+import os
 import sys
 from pathlib import Path
 
 from mapagent import agent, providers, tools
-from mapagent.store import MemoryStore
+from mapagent.store import MemoryStore, PostgisStore
 
 QUESTIONS = Path(__file__).with_name("questions.json")
 EXPECTED = Path(__file__).with_name("expected_sites.json")
+WELD_QUESTIONS = Path(__file__).with_name("weld_questions.json")
+WELD_DATA = Path(__file__).resolve().parents[1] / "data/weld.json"
 THRESHOLD = 0.85
-SETS = ("core", "hard", "fresh")
+SETS = ("core", "hard", "fresh", "weld")
 
 
 def same(expected, actual):
@@ -70,19 +80,26 @@ def calls_match(expected, trace):
 
 
 def expected_sites(store, calls):
-    """Run the expected calls directly, feeding a geocoded place into the next sites_near."""
-    sites, place = [], None
+    """Run the expected calls directly, feeding geocoded places into the next sites_near.
+
+    Several geocoded places become one sites_near call: the first as its centre and
+    the rest as more_points.
+    """
+    sites, places = [], []
     for c in calls:
         args = {k: representative(v) for k, v in c["args"].items()}
-        if c["tool"] == "sites_near" and place:
-            args.update(latitude=place["latitude"], longitude=place["longitude"])
+        if c["tool"] == "sites_near" and places:
+            first, *rest = places
+            args.update(latitude=first["latitude"], longitude=first["longitude"])
+            if rest:
+                args["more_points"] = [{"latitude": p["latitude"], "longitude": p["longitude"]} for p in rest]
         result, features = tools.call(store, c["tool"], args)
         if "error" in result:
             raise SystemExit(f"Expected call is invalid: {c} -> {result['error']}")
         if c["tool"] == "geocode_place":
-            place = result["places"][0] if result["count"] == 1 else None
-            if place is None:
+            if result["count"] != 1:
                 break
+            places.append(result["places"][0])
         if features is not None:
             sites = [f["id"] for f in features]
     return sorted(sites)
@@ -153,10 +170,21 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--provider", default="claude")
     parser.add_argument("--freeze", action="store_true")
+    parser.add_argument("--data", choices=("fixture", "weld"), default="fixture",
+                        help="weld: ask the real-data questions against real Weld parcels")
     parser.add_argument("--set", choices=SETS, help="run one set only")
     parser.add_argument("--trials", type=int, default=1, choices=range(1, 11), metavar="1-10",
                         help="ask each question this many times")
     options = parser.parse_args()
+    if options.data == "weld":
+        url = os.environ.get("MAP_AGENT_DATABASE_URL")
+        store = PostgisStore(url) if url else MemoryStore(WELD_DATA)
+        questions = [{**q, "set": "weld"} for q in json.loads(WELD_QUESTIONS.read_text())]
+        expected = {q["id"]: sorted(q["sites"]) if "sites" in q else expected_sites(store, q["calls"]) for q in questions}
+        print(f"store: {'PostGIS' if url else WELD_DATA}", file=sys.stderr)
+        rows = run(providers.get(options.provider), store, questions, expected, options.trials)
+        print(report(rows, options.provider))
+        return
     store, questions = MemoryStore(), json.loads(QUESTIONS.read_text())
     if options.freeze:
         frozen = {q["id"]: sorted(q["sites"]) if "sites" in q else expected_sites(store, q["calls"]) for q in questions}
