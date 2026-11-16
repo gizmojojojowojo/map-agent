@@ -11,6 +11,11 @@ Sources:
 - Places: U.S. Census Gazetteer, every Colorado city, town and census-designated place,
   with its county from Census TIGERweb county boundaries
 
+If MAP_AGENT_DATA_FALLBACK_URL is set and a source fails, the script writes the
+saved copy at that URL instead (the deploy uses the GitHub release "data-latest").
+After a good local build, refresh the saved copy:
+    gh release upload data-latest data/weld.json --clobber
+
 Usage:
     pip install -r requirements-data.txt
     python scripts/build_weld.py
@@ -20,6 +25,7 @@ import argparse
 import csv
 import io
 import json
+import os
 import re
 import sys
 import time
@@ -114,11 +120,32 @@ def nearest_miles(sites, lines, column):
     return joined.groupby("site_id")[column].min() / MILE_M
 
 
+def use_saved_copy(url, output, failure):
+    """Write the last good build from `url` to `output` after a source failed. Exits if the copy is unusable too."""
+    print(f"A source failed ({failure}).\nUsing the saved copy at {url}", file=sys.stderr, flush=True)
+    data = fetch_json(url)
+    if not isinstance(data, dict) or not data.get("sites") or not data.get("places"):
+        raise SystemExit(f"The saved copy at {url} has no sites or places; not using it.")
+    output.write_text(json.dumps(data, separators=(",", ":")) + "\n")
+    print(f"wrote the saved copy built {data.get('built', 'on an unknown date')}: {len(data['sites']):,} parcels, "
+          f"{len(data['places']):,} places, to {output}")
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--min-acres", type=float, default=80)
     parser.add_argument("--output", type=Path, default=ROOT / "data/weld.json")
     options = parser.parse_args()
+    fallback = os.environ.get("MAP_AGENT_DATA_FALLBACK_URL")
+    try:
+        build(options)
+    except SystemExit as failure:  # a source is down or has changed
+        if not fallback:
+            raise
+        use_saved_copy(fallback, options.output, failure)
+
+
+def build(options):
     west, south, east, north = WELD_BOUNDS
     envelope = {"geometry": f"{west},{south},{east},{north}", "geometryType": "esriGeometryEnvelope",
                 "inSR": 4326, "spatialRel": "esriSpatialRelIntersects"}

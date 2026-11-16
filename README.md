@@ -86,9 +86,13 @@ https://map-agent-pgfg.onrender.com runs on Render's free plan. Each deploy buil
 |---|---|
 | Build command | `pip install -r requirements.txt -r requirements-data.txt && python scripts/build_weld.py` |
 | Start command | `uvicorn mapagent.api:app --host 0.0.0.0 --port $PORT` |
-| Environment | `MAP_AGENT_DATA=data/weld.json`, `MAP_AGENT_TRUST_PROXY=1`, `PYTHON_VERSION=3.14.6`, and `ANTHROPIC_API_KEY` set in the Render dashboard |
+| Environment | `MAP_AGENT_DATA=data/weld.json`, `MAP_AGENT_TRUST_PROXY=1`, `MAP_AGENT_DATA_FALLBACK_URL` (the release asset below), `PYTHON_VERSION=3.14.6`, and `ANTHROPIC_API_KEY` set in the Render dashboard |
 
-Every push to `main` redeploys. A deploy fails, and the previous one keeps serving, if a data source is down or has changed.
+If a data source is down or has changed, the build uses the last good copy instead: the `weld.json` asset on the [`data-latest` release](https://github.com/gizmojojojowojo/map-agent/releases/tag/data-latest), named by `MAP_AGENT_DATA_FALLBACK_URL`. The build log says when it does. After a good local build, refresh that copy:
+
+```bash
+gh release upload data-latest data/weld.json --clobber
+```
 
 ### Limits for a public deployment
 
