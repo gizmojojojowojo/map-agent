@@ -8,6 +8,8 @@ Sources:
 - Parcels: Colorado Public Parcel Composite (Colorado OIT, from county data)
 - Transmission: HIFLD U.S. Transmission Lines
 - Highways: CDOT Highways in Colorado (Colorado Information Marketplace)
+- Places: U.S. Census Gazetteer, every Colorado city, town and census-designated place,
+  with its county from Census TIGERweb county boundaries
 
 Usage:
     pip install -r requirements-data.txt
@@ -15,7 +17,10 @@ Usage:
     MAP_AGENT_DATA=data/weld.json uvicorn mapagent.api:app --reload
 """
 import argparse
+import csv
+import io
 import json
+import re
 import sys
 import time
 import urllib.parse
@@ -30,6 +35,9 @@ PARCELS = "https://gis.colorado.gov/public/rest/services/Address_and_Parcel/Colo
 TRANSMISSION = ("https://services3.arcgis.com/fwwoCWVtaahwlvxO/arcgis/rest/services/"
                 "HIFLD_US_Transmission_Lines_with_ICF/FeatureServer/0")
 HIGHWAYS = "https://data.colorado.gov/resource/phvc-rwei.geojson?$limit=50000"
+PLACES = "https://www2.census.gov/geo/docs/maps-data/data/gazetteer/2025_Gazetteer/2025_gaz_place_08.txt"
+COUNTIES = "https://tigerweb.geo.census.gov/arcgis/rest/services/TIGERweb/State_County/MapServer/1"
+PLACE_KINDS = {"city and county": "city", "city": "city", "town": "town", "CDP": "community"}
 WELD_BOUNDS = (-105.06, 39.90, -103.55, 41.01)  # west, south, east, north, padded slightly
 PROJECTED = "EPSG:26913"  # UTM zone 13N, metres
 ACRE_M2 = 4046.8564224
@@ -65,6 +73,31 @@ def arcgis_features(url, label, **query):
         if not batch or not more:
             return features
         offset += len(batch)
+
+
+def colorado_places():
+    """Every Colorado city, town and census-designated place, with its county."""
+    with urllib.request.urlopen(urllib.request.Request(PLACES, headers={"User-Agent": "map-agent"}), timeout=120) as r:
+        rows = [{key.strip(): value for key, value in row.items()}  # older files pad the last header
+                for row in csv.DictReader(io.StringIO(r.read().decode("utf-8")), delimiter="|")]
+    pattern = re.compile(r"^(.*) (%s)$" % "|".join(PLACE_KINDS))
+    places = []
+    for row in rows:
+        match = pattern.match(row["NAME"].strip())
+        if not match:
+            raise SystemExit(f"Unexpected place name in the Census Gazetteer: {row['NAME']!r}")
+        places.append({"name": match[1], "kind": PLACE_KINDS[match[2]],
+                       "latitude": float(row["INTPTLAT"]), "longitude": float(row["INTPTLONG"].strip())})
+    points = gpd.GeoDataFrame(places, geometry=gpd.points_from_xy([p["longitude"] for p in places],
+                                                                  [p["latitude"] for p in places]), crs="EPSG:4326")
+    counties = frame(arcgis_features(COUNTIES, "counties", where="STATE='08'", outFields="NAME"), "counties")
+    joined = gpd.sjoin(points, counties[["NAME", "geometry"]], how="left", predicate="within")
+    joined = joined[~joined.index.duplicated()]
+    if joined["NAME"].isna().any():
+        raise SystemExit(f"{joined['NAME'].isna().sum()} places fell outside every county; check the county source.")
+    for place, county in zip(places, joined["NAME"]):
+        place["county"] = county.removesuffix(" County")
+    return places
 
 
 def frame(features, label):
@@ -116,14 +149,16 @@ def main():
               "geometry": mapping(row.geometry)}
              for row, centre in zip(shapes.itertuples(), centres)]
 
-    places = json.loads((ROOT / "data/fixture.json").read_text())["places"]
+    print("Downloading places", file=sys.stderr)
+    places = colorado_places()
     output = {"synthetic": False, "built": time.strftime("%Y-%m-%d"), "min_acres": options.min_acres,
-              "sources": {"parcels": PARCELS, "transmission": TRANSMISSION, "highways": HIGHWAYS},
+              "sources": {"parcels": PARCELS, "transmission": TRANSMISSION, "highways": HIGHWAYS,
+                          "places": PLACES, "counties": COUNTIES},
               "sites": sites, "places": places}
     options.output.write_text(json.dumps(output, separators=(",", ":")) + "\n")
     print(f"wrote {len(sites):,} parcels to {options.output} "
           f"({options.output.stat().st_size / 1e6:.1f} MB; {len(lines):,} transmission segments, "
-          f"{len(highways):,} highway segments)")
+          f"{len(highways):,} highway segments, {len(places):,} places)")
 
 
 if __name__ == "__main__":

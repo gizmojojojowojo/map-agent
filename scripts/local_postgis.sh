@@ -18,4 +18,8 @@ if ! "$BIN/psql" "$URL" -Atc "SELECT 1" >/dev/null 2>&1; then
     "$BIN/createdb" -h "$DATA" -p "$PORT" map_agent
     "$BIN/psql" "$URL" -q -v ON_ERROR_STOP=1 -c "CREATE EXTENSION postgis" -c "CREATE EXTENSION pg_trgm" -f sql/001_schema.sql
 fi
+# Apply later migrations that this database has not seen yet.
+if [ "$("$BIN/psql" "$URL" -Atc "SELECT count(*) FROM information_schema.columns WHERE table_schema = 'map_agent' AND table_name = 'places' AND column_name = 'county'")" = 0 ]; then
+    "$BIN/psql" "$URL" -q -v ON_ERROR_STOP=1 -f sql/002_place_county.sql
+fi
 echo "export MAP_AGENT_DATABASE_URL=\"$URL\""

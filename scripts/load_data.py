@@ -1,4 +1,4 @@
-"""Load a data file (data/fixture.json by default) into PostGIS. Run sql/001_schema.sql first.
+"""Load a data file (data/fixture.json by default) into PostGIS. Run the files in sql/ in order first.
 
 Usage:
     MAP_AGENT_DATABASE_URL=postgresql://... python scripts/load_data.py
@@ -24,7 +24,8 @@ data = json.loads(parser.parse_args().path.read_text())
 
 sites = [(site["site_id"], json.dumps({k: v for k, v in site.items() if k != "geometry"}), json.dumps(site["geometry"]))
          for site in data["sites"]]
-places = [(p["name"], p["kind"], normalize_place(p["name"]), p["longitude"], p["latitude"]) for p in data["places"]]
+places = [(p["name"], p["kind"], p.get("county", ""), normalize_place(p["name"]), p["longitude"], p["latitude"])
+          for p in data["places"]]
 
 with psycopg.connect(os.environ["MAP_AGENT_DATABASE_URL"]) as connection, connection.cursor() as cursor:
     cursor.execute("TRUNCATE map_agent.sites, map_agent.places")
@@ -33,7 +34,7 @@ with psycopg.connect(os.environ["MAP_AGENT_DATABASE_URL"]) as connection, connec
         "INSERT INTO map_agent.sites (site_id, record, geom) VALUES (%s, %s, "
         "ST_Multi(ST_CollectionExtract(ST_MakeValid(ST_SetSRID(ST_GeomFromGeoJSON(%s), 4326)), 3)))", sites)
     cursor.executemany(
-        "INSERT INTO map_agent.places (name, kind, search_name, geom) "
-        "VALUES (%s, %s, %s, ST_SetSRID(ST_MakePoint(%s, %s), 4326))", places)
+        "INSERT INTO map_agent.places (name, kind, county, search_name, geom) "
+        "VALUES (%s, %s, %s, %s, ST_SetSRID(ST_MakePoint(%s, %s), 4326))", places)
     cursor.execute("ANALYZE map_agent.sites")
 print(f"loaded {len(sites):,} sites and {len(places):,} places")

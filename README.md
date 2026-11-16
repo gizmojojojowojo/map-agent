@@ -48,6 +48,7 @@ The build script downloads three public layers and keeps Weld County parcels of 
 - Parcels: [Colorado Public Parcel Composite](https://gis.colorado.gov/public/rest/services/Address_and_Parcel/Colorado_Public_Parcels/FeatureServer/0), maintained by the Colorado Office of Information Technology from county data
 - Transmission lines: [HIFLD U.S. Transmission Lines](https://services3.arcgis.com/fwwoCWVtaahwlvxO/arcgis/rest/services/HIFLD_US_Transmission_Lines_with_ICF/FeatureServer/0)
 - Highways: [CDOT Highways in Colorado](https://data.colorado.gov/Transportation/Highways-in-Colorado/phvc-rwei)
+- Places: the [Census Gazetteer](https://www.census.gov/geographies/reference-files/time-series/geo/gazetteer-files.html) list of all 482 Colorado cities, towns, and census-designated places, each tagged with its county from [Census TIGERweb](https://tigerweb.geo.census.gov/) county boundaries
 
 Acreage is measured from each parcel's geometry. Distances run from the parcel edge to the nearest mapped line. The output keeps the parcel ID, acreage, distances, and simplified geometry, and leaves out owner names and addresses. It is not committed to the repository.
 
@@ -55,7 +56,7 @@ Evals and tests always use the fixture, so their results do not change when the 
 
 ### Use PostGIS
 
-On a Mac with [Postgres.app](https://postgresapp.com), one script starts a private PostGIS server for this project. It keeps its data in `.pgdata`, which git ignores, listens on a local socket at port 5433, and leaves any other Postgres server alone. It prints the database URL to export.
+On a Mac with [Postgres.app](https://postgresapp.com), one script starts a private PostGIS server for this project and applies any schema changes in `sql/` it has not seen. It keeps its data in `.pgdata`, which git ignores, listens on a local socket at port 5433, and leaves any other Postgres server alone. It prints the database URL to export.
 
 ```bash
 eval "$(./scripts/local_postgis.sh)"
@@ -66,7 +67,7 @@ uvicorn mapagent.api:app --reload
 With another PostGIS install, create the schema yourself and point `MAP_AGENT_DATABASE_URL` at it:
 
 ```bash
-createdb map_agent && psql map_agent -c "CREATE EXTENSION postgis" -c "CREATE EXTENSION pg_trgm" -f sql/001_schema.sql
+createdb map_agent && psql map_agent -c "CREATE EXTENSION postgis" -c "CREATE EXTENSION pg_trgm" -f sql/001_schema.sql -f sql/002_place_county.sql
 export MAP_AGENT_DATABASE_URL=postgresql://localhost/map_agent
 python scripts/load_data.py
 ```
@@ -131,11 +132,10 @@ All three sets have now guided fixes, so these scores confirm the fixes and say 
 
 The agent loop, tools, eval scoring, and fixture store are covered by tests. The Claude provider has passed a live eval run. The HTTP API and map page run end to end on the fixture and on real Weld County parcels. The PostGIS store matches the in-memory store on every eval query and answers live questions on the real parcels. The OpenAI provider is written and awaiting its first live run.
 
-Only the 10 towns in the fixture can be geocoded, so questions about other Weld towns, such as Eaton, get a request for clarification.
+With real data, the geocoder knows every Colorado city, town, and census-designated place. When two places share a name, such as the Twin Lakes in Adams and Lake counties, it returns both with their counties, and the agent asks which one is meant.
 
 ## Roadmap
 
-- Load Colorado towns into the geocoder
 - Write fresh eval questions against the real Weld parcels
 - Publish eval results for Claude and OpenAI models
 - Add tools for point lookup, drawn areas, and context layers

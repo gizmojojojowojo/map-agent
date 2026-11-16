@@ -79,11 +79,13 @@ class MemoryStore:
 
     def geocode(self, name):
         wanted = normalize_place(name)
-        by_name = {normalize_place(p["name"]): p for p in self.places}
-        if wanted in by_name:
-            return [{**by_name[wanted], "match": "exact"}]
-        close = difflib.get_close_matches(wanted, list(by_name), n=3, cutoff=0.8)
-        return [{**by_name[n], "match": "close"} for n in close]
+        places = sorted(self.places, key=lambda p: (p["name"], p.get("county", "")))
+        exact = [p for p in places if normalize_place(p["name"]) == wanted]
+        if exact:  # several places can share a name, such as two Twin Lakes in different counties
+            return [{**p, "match": "exact"} for p in exact[:5]]
+        names = sorted({normalize_place(p["name"]) for p in places})
+        close = difflib.get_close_matches(wanted, names, n=3, cutoff=0.8)
+        return [{**p, "match": "close"} for n in close for p in places if normalize_place(p["name"]) == n][:3]
 
 
 class PostgisStore:
@@ -143,12 +145,12 @@ class PostgisStore:
 
     def geocode(self, name):
         wanted = normalize_place(name)
-        columns = "name, kind, ST_Y(geom) AS latitude, ST_X(geom) AS longitude"
+        columns = "name, kind, county, ST_Y(geom) AS latitude, ST_X(geom) AS longitude"
         exact = self.connection.execute(
-            f"SELECT {columns}, 'exact' AS match FROM map_agent.places WHERE search_name = %s ORDER BY name LIMIT 5",
+            f"SELECT {columns}, 'exact' AS match FROM map_agent.places WHERE search_name = %s ORDER BY name, county LIMIT 5",
             [wanted]).fetchall()
         if exact:
             return exact
         return self.connection.execute(
             f"SELECT {columns}, 'close' AS match FROM map_agent.places WHERE similarity(search_name, %s) > 0.5 "
-            "ORDER BY similarity(search_name, %s) DESC, name LIMIT 3", [wanted, wanted]).fetchall()
+            "ORDER BY similarity(search_name, %s) DESC, name, county LIMIT 3", [wanted, wanted]).fetchall()

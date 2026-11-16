@@ -209,3 +209,12 @@ def test_openai_unreadable_arguments_are_rejected_by_the_tool():
     for raw in ("{not json", "[1, 2]", None):
         result, _ = tools.call(STORE, "geocode_place", OpenAIProvider._arguments(raw))
         assert "Invalid input" in result["error"]
+
+
+def test_geocode_returns_every_place_that_shares_a_name(tmp_path):
+    places = [{"name": "Twin Lakes", "kind": "community", "county": county, "latitude": lat, "longitude": lon}
+              for county, lat, lon in (("Lake", 39.08, -106.38), ("Adams", 39.82, -104.99))]
+    path = tmp_path / "data.json"
+    path.write_text(json.dumps({"sites": [], "places": places}))
+    found = MemoryStore(path).geocode("twin lakes")
+    assert [(p["county"], p["match"]) for p in found] == [("Adams", "exact"), ("Lake", "exact")]
