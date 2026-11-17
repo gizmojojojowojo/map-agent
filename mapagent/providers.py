@@ -75,10 +75,12 @@ class OpenAIProvider:
         if message["role"] == "user":
             return [{"role": "user", "content": message["text"]}]
         if message["role"] == "assistant":
-            return [{"role": "assistant", "content": message["text"] or None,
-                     "tool_calls": [{"id": c.id, "type": "function",
-                                     "function": {"name": c.name, "arguments": json.dumps(c.args)}}
-                                    for c in message["calls"]]}]
+            converted = {"role": "assistant", "content": message["text"] or None}
+            if message["calls"]:  # an empty tool_calls list is rejected
+                converted["tool_calls"] = [{"id": c.id, "type": "function",
+                                            "function": {"name": c.name, "arguments": json.dumps(c.args)}}
+                                           for c in message["calls"]]
+            return [converted]
         return [{"role": "tool", "tool_call_id": r["id"], "content": r["content"]} for r in message["results"]]
 
 

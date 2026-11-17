@@ -5,6 +5,7 @@ Run: uvicorn mapagent.api:app --reload
 Questions are rate limited (see mapagent/limits.py). Behind a proxy that sets
 X-Forwarded-For, such as Render, set MAP_AGENT_TRUST_PROXY=1 so limits apply per visitor.
 """
+import json
 import logging
 import os
 import re
@@ -15,7 +16,7 @@ from typing import Annotated
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse, JSONResponse
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from . import agent, providers
 from .limits import Limited, Limiter
@@ -27,8 +28,29 @@ log = logging.getLogger("uvicorn.error")
 limiter = Limiter.from_env()
 
 
+class PastCall(BaseModel):
+    tool: Annotated[str, Field(min_length=1, max_length=40)]
+    args: dict
+
+    @field_validator("args")
+    @classmethod
+    def small(cls, value):
+        if len(json.dumps(value)) > 2000:
+            raise ValueError("Tool inputs in history are too long.")
+        return value
+
+
+class PastTurn(BaseModel):
+    """One earlier turn, as returned in history_entry by the previous answer."""
+    question: Annotated[str, Field(min_length=1, max_length=agent.MAX_QUESTION)]
+    answer: Annotated[str, Field(max_length=2000)]
+    calls: Annotated[list[PastCall], Field(max_length=8)] = []
+    site_ids: Annotated[list[Annotated[str, Field(max_length=40)]], Field(max_length=100)] = []
+
+
 class AskRequest(BaseModel):
     question: Annotated[str, Field(min_length=1, max_length=agent.MAX_QUESTION)]
+    history: Annotated[list[PastTurn], Field(max_length=agent.MAX_HISTORY)] = []
 
 
 @lru_cache
@@ -80,7 +102,7 @@ def ask(request: AskRequest, http: Request):
     except Limited as error:
         return JSONResponse({"detail": str(error)}, status_code=429, headers={"Retry-After": str(error.retry_after)})
     try:
-        return agent.ask(request.question, store(), provider())
+        return agent.ask(request.question, store(), provider(), history=[t.model_dump() for t in request.history])
     except ValueError as error:
         raise HTTPException(422, str(error)) from None
     except Exception as error:  # report the cause instead of a bare 500; full detail goes to the log

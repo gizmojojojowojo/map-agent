@@ -14,6 +14,12 @@
   input { flex: 1 1 auto; min-width: 0; box-sizing: border-box; padding: 8px; font: inherit; }
   button { flex: none; padding: 8px 12px; font: inherit; }
   #answer { margin: 16px 0 8px; }
+  #earlier { margin: 16px 0 0; padding: 0; list-style: none; color: #555; font-size: 13px; }
+  #earlier li { margin: 0 0 8px; padding-left: 8px; border-left: 2px solid #ddd; }
+  #earlier b { color: #222; font-weight: 600; }
+  #check { color: #8a4b00; font-size: 13px; }
+  #restart { margin-top: 8px; background: none; border: 0; padding: 0; color: #2563a8; text-decoration: underline; cursor: pointer; font-size: 13px; }
+  [hidden] { display: none !important; }
   #boundary, #trace { color: #555; font-size: 13px; }
   #trace { white-space: pre-wrap; overflow-wrap: anywhere; font-family: ui-monospace, monospace; }
   @media (max-width: 700px) {
@@ -29,7 +35,10 @@
     <input id="question" maxlength="400" required aria-label="Question" placeholder="Sites over 300 acres in Weld County">
     <button>Ask</button>
   </form>
+  <button id="restart" type="button" hidden>Start a new conversation</button>
+  <ul id="earlier" aria-label="Earlier questions"></ul>
   <p id="answer" role="status"></p>
+  <p id="check" hidden></p>
   <p id="boundary"></p>
   <div id="trace"></div>
 </aside>
@@ -41,20 +50,51 @@ L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 18, att
 // Leaflet measures its container once. Re-measure whenever the layout changes its size.
 new ResizeObserver(() => map.invalidateSize()).observe(document.getElementById('map'));
 let layer;
+let history = [];  // earlier turns, sent with each question so follow-ups work
+const MAX_HISTORY = 4;
 const $ = id => document.getElementById(id);
+function showEarlier() {
+  $('earlier').replaceChildren(...history.slice(0, -1).map(turn => {
+    const item = document.createElement('li');
+    const asked = document.createElement('b');
+    asked.textContent = turn.question;
+    item.append(asked, document.createElement('br'), turn.answer);
+    return item;
+  }));
+  $('restart').hidden = history.length === 0;
+}
+$('restart').addEventListener('click', () => {
+  history = [];
+  showEarlier();
+  $('answer').textContent = $('boundary').textContent = $('trace').textContent = '';
+  $('check').hidden = true;
+  if (layer) { layer.remove(); layer = null; }
+  $('question').placeholder = 'Sites over 300 acres in Weld County';
+  $('question').focus();
+});
 $('ask').addEventListener('submit', async event => {
   event.preventDefault();
+  const question = $('question').value;
   $('answer').textContent = 'Working…';
   $('boundary').textContent = $('trace').textContent = '';
+  $('check').hidden = true;
   try {
     const response = await fetch('/agent/ask', { method: 'POST', headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ question: $('question').value }) });
+      body: JSON.stringify({ question, history: history.slice(-MAX_HISTORY) }) });
     if (!response.ok) {
       const problem = await response.json().catch(() => ({}));
       throw new Error(typeof problem.detail === 'string' ? problem.detail : `Request failed (${response.status}). Try again.`);
     }
     const result = await response.json();
     $('answer').textContent = result.answer;
+    if (result.grounding && !result.grounding.ok) {
+      $('check').textContent = `Check this answer: it mentions ${result.grounding.unsupported.join(', ')}, which the data lookups did not return.`;
+      $('check').hidden = false;
+    }
+    history = [...history, result.history_entry].slice(-MAX_HISTORY);
+    showEarlier();
+    $('question').value = '';
+    $('question').placeholder = 'Ask a follow-up, such as: only the ones in Adams County';
     $('boundary').textContent = result.evidence_boundary;
     $('trace').textContent = result.trace.map(s => `${s.tool} ${JSON.stringify(s.args)}${s.error ? ' -> ' + s.error : ''}`).join('\n');
     if (layer) layer.remove();

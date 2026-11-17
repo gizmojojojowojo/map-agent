@@ -1,7 +1,15 @@
 """Score the agent on evals/questions.json.
 
 A question passes when the agent made the expected tool calls with the expected
-inputs and the map ends up showing exactly the expected sites.
+inputs, the map ends up showing exactly the expected sites, and the answer states
+no site or figure that the evidence lacks (see mapagent/grounding.py). A question
+may list "forbid_numbers" for claims planted in it, which fail even though the
+question itself contains them.
+
+Follow-up questions list earlier questions in "history". Those are asked first,
+each with the turns before it, and only the last question is scored. An expected
+call marked "optional": true may be skipped, such as a repeat geocode the agent
+can avoid by reusing coordinates from an earlier turn.
 
 Questions belong to a set. The "core" set gates the run. The "hard" and "fresh"
 sets are reported only, and each failure prints the calls the agent made. Hard
@@ -44,7 +52,7 @@ EXPECTED = Path(__file__).with_name("expected_sites.json")
 WELD_QUESTIONS = Path(__file__).with_name("weld_questions.json")
 WELD_DATA = Path(__file__).resolve().parents[1] / "data/weld.json"
 THRESHOLD = 0.85
-SETS = ("core", "hard", "fresh", "weld")
+SETS = ("core", "hard", "fresh", "followup", "weld")
 # US$ per million input and output tokens (Anthropic first-party rates, November 2026).
 PRICES = {"claude-haiku-5-5": (0.10, 0.50), "claude-sonnet-5-5": (2.00, 10.00), "claude-opus-5-5": (4.00, 20.00)}
 
@@ -74,12 +82,24 @@ def representative(value):
     return value
 
 
+def fits(want, got):
+    return want["tool"] == got["tool"] and all(k in got["args"] and same(v, got["args"][k])
+                                               for k, v in want["args"].items())
+
+
 def calls_match(expected, trace):
     """Successful calls must match the expected tools in order, with every expected input present."""
     made = [step for step in trace if not step["error"]]
-    return len(made) == len(expected) and all(
-        want["tool"] == got["tool"] and all(k in got["args"] and same(v, got["args"][k]) for k, v in want["args"].items())
-        for want, got in zip(expected, made))
+
+    def match(want, got):
+        if not want:
+            return not got
+        first, rest = want[0], want[1:]
+        if first.get("optional") and match(rest, got):
+            return True
+        return bool(got) and fits(first, got[0]) and match(rest, got[1:])
+
+    return match(expected, made)
 
 
 def expected_sites(store, calls):
@@ -111,19 +131,38 @@ def expected_sites(store, calls):
 def score(question, result, expected_ids):
     shown = sorted(f["id"] for f in result["features"]["features"])
     made = [{"tool": step["tool"], "args": step["args"]} for step in result["trace"] if not step["error"]]
+    check = result.get("grounding", {"ok": True, "unsupported": [], "corrected": False})
     return {"id": question["id"], "set": question.get("set", "core"),
             "calls": calls_match(question["calls"], result["trace"]),
-            "sites": shown == expected_ids, "complete": result["complete"], "made": made, "shown": shown}
+            "sites": shown == expected_ids, "complete": result["complete"], "made": made, "shown": shown,
+            "grounded": check["ok"], "unsupported": check["unsupported"], "corrected": check["corrected"],
+            "answer": result["answer"]}
+
+
+def ask_with_history(provider, store, question):
+    """Ask the earlier questions first, then the scored one. Usage covers every turn."""
+    history, usage = [], {}
+    for earlier in question.get("history", []):
+        result = agent.ask(earlier, store, provider, history=history)
+        history.append(result["history_entry"])
+        for key, value in result.get("usage", {}).items():
+            usage[key] = usage.get(key, 0) + value
+    result = agent.ask(question["question"], store, provider, history=history,
+                       forbid_numbers=question.get("forbid_numbers", ()))
+    for key, value in result.get("usage", {}).items():
+        usage[key] = usage.get(key, 0) + value
+    return {**result, "usage": usage}
 
 
 def attempt(provider, store, question, expected_ids):
     started = time.perf_counter()
     try:
-        result = agent.ask(question["question"], store, provider)
+        result = ask_with_history(provider, store, question)
         row = {**score(question, result, expected_ids), "usage": result.get("usage", {})}
     except Exception as error:  # one failed request should not hide the other results
         row = {"id": question["id"], "set": question.get("set", "core"), "calls": False, "sites": False,
-               "complete": False, "made": [], "shown": [], "usage": {}, "error": repr(error)}
+               "complete": False, "made": [], "shown": [], "grounded": False, "unsupported": [],
+               "corrected": False, "answer": "", "usage": {}, "error": repr(error)}
     return {**row, "seconds": time.perf_counter() - started}
 
 
@@ -143,7 +182,8 @@ def run(provider, store, questions, expected, trials=1):
 
 
 def ok(attempt_row):
-    return attempt_row["calls"] and attempt_row["sites"] and attempt_row["complete"]
+    return (attempt_row["calls"] and attempt_row["sites"] and attempt_row["complete"]
+            and attempt_row.get("grounded", True))
 
 
 def passed(row):
@@ -179,10 +219,14 @@ def report(rows, provider, model=None):
     for r in rows:
         label = "PASS" if passed(r) else "FAIL" if r["passes"] == 0 else "FLAKY"
         tally = f" {r['passes']}/{r['trials']}" if r["trials"] > 1 else ""
-        lines.append(f"{label:<5}{tally} {r['set']:<5} {r['id']:<26} calls={r['calls']} sites={r['sites']} {r.get('error', '')}")
+        lines.append(f"{label:<5}{tally} {r['set']:<8} {r['id']:<26} calls={r['calls']} sites={r['sites']} "
+                     f"grounded={r.get('grounded', True)} {r.get('error', '')}")
         if not passed(r) and "error" not in r:
             lines.append(f"      made:  {json.dumps(r['made'])}")
             lines.append(f"      shown: {json.dumps(r['shown'])}")
+            if not r.get("grounded", True):
+                lines.append(f"      unsupported: {', '.join(r['unsupported'])}")
+                lines.append(f"      answer: {r['answer'][:300]}")
     lines.append("")
     for name in SETS:
         group = [r for r in rows if r["set"] == name]
@@ -191,6 +235,9 @@ def report(rows, provider, model=None):
             flaky = sum(0 < r["passes"] < r["trials"] for r in group)
             lines.append(f"{provider} {name}: {sum(map(passed, group))} of {len(group)} passed, {rate(group):.0%}{gate}"
                          + (f", {flaky} flaky" if flaky else ""))
+    corrected = sum(r.get("corrected", False) for r in rows)
+    if corrected:
+        lines.append(f"{corrected} answer(s) were rewritten once after the grounding check; see each row for the result")
     stats = summary(rows, model)
     price = f", ${stats['cost_per_answer'] * 1000:.2f} per 1,000 answers, ${stats['total_cost']:.2f} this run" \
         if stats["cost_per_answer"] is not None else ""

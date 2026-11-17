@@ -250,5 +250,33 @@
  ],
  "fresh-two-minimums": [
   "W-004"
+ ],
+ "followup-add-filter": [
+  "W-001"
+ ],
+ "followup-change-radius": [
+  "W-001",
+  "W-002",
+  "W-003",
+  "W-004",
+  "W-007"
+ ],
+ "followup-swap-county": [
+  "M-001",
+  "M-002"
+ ],
+ "followup-near-plus-size": [
+  "A-001"
+ ],
+ "followup-after-refusal": [
+  "A-003",
+  "W-005"
+ ],
+ "followup-new-topic": [
+  "M-001"
+ ],
+ "followup-two-steps": [
+  "W-003",
+  "W-006"
  ]
 }

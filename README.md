@@ -11,6 +11,7 @@ Ask a question about land sites in plain language and see the answer on a map.
 3. Pydantic checks the inputs. A bad input goes back to the model as an error so it can correct itself.
 4. The tool runs a fixed, read-only query and returns the matching sites.
 5. The model writes a short answer. The response also carries the GeoJSON for the map and a trace of every tool call.
+6. A grounding check compares every site ID and figure in the answer with the question, the earlier turns, the tool inputs, and the tool results. If the answer states something none of them contain, the model is asked once to rewrite it. The response reports the result, and the map page shows a warning when something is still unsupported.
 
 | Tool | What it does |
 |---|---|
@@ -21,6 +22,21 @@ Ask a question about land sites in plain language and see the answer on a map.
 The model can chain tools. "What's within 5 miles of Hudson?" calls `geocode_place`, then `sites_near`.
 
 Questions the data cannot answer, such as available power capacity or ownership, get a plain statement that the data does not cover them.
+
+### Follow-up questions
+
+Each answer includes a `history_entry` with the question, the answer, the tool calls made, and the sites shown. Send the last few entries back as `history` with the next question, and the agent can handle follow-ups such as "now only the ones in Adams County" or "what about 10 miles?" It runs the tools again with the earlier inputs plus the change. The server keeps no conversation state; the map page holds the history and sends up to four earlier turns.
+
+```json
+{"question": "Now only the ones within 1 mile of transmission.",
+ "history": [{"question": "Sites over 300 acres in Weld County.", "answer": "...",
+              "calls": [{"tool": "search_sites", "args": {"min_acres": 300.01, "counties": ["Weld"]}}],
+              "site_ids": ["W-003", "W-006", "W-001"]}]}
+```
+
+History comes from the client, so the server limits its size and treats it as context only. Every tool input is still validated.
+
+The grounding check catches invented sites and figures. It cannot catch a real figure attached to the wrong site.
 
 ## Run it
 
@@ -125,7 +141,7 @@ python -m evals.run --provider claude
 python -m evals.run --provider openai   # needs OPENAI_API_KEY and MAP_AGENT_OPENAI_MODEL
 ```
 
-`evals/questions.json` holds 65 questions in three sets. A question passes when the agent makes the expected tool calls with the expected inputs and the map shows exactly the expected sites.
+`evals/questions.json` holds 72 questions in four sets. A question passes when the agent makes the expected tool calls with the expected inputs, the map shows exactly the expected sites, and the answer passes the grounding check. The planted "500 MW" claim in the injection question is now checked by the script.
 
 **Core (30 questions).** Each maps onto one tool or one two-step chain. Eight test restraint. Five ask for something the data lacks, such as price, zoning, or fiber service. Three have no matching place or site, and the correct answer says so. The run exits with an error when fewer than 85% of core questions pass.
 
@@ -135,6 +151,12 @@ python -m evals.run --provider openai   # needs OPENAI_API_KEY and MAP_AGENT_OPE
 
 ```bash
 python -m evals.run --provider claude --set fresh --trials 3
+```
+
+**Follow-up (7 questions).** Each asks one or two earlier questions first, then scores the follow-up. They cover adding a filter, changing a radius, swapping a county, a follow-up after a declined question, filters that build up over two turns, and a change of topic, where earlier filters must not carry over.
+
+```bash
+python -m evals.run --provider claude --set followup --trials 3
 ```
 
 Models give different answers to the same question from run to run. `--trials 3` asks each question three times, counts a question as passed only when every trial passes, and labels the rest `FLAKY` or `FAIL`.
@@ -224,7 +246,7 @@ Saved runs in `evals/results/` are not committed. The real-data rows hold parcel
 
 ## Project status
 
-The agent loop, tools, eval scoring, and fixture store are covered by tests. The Claude provider has passed a live eval run. The HTTP API and map page run end to end on the fixture and on real Weld County parcels. The PostGIS store matches the in-memory store on every eval query and answers live questions on the real parcels, where the agent passes 22 of 23 real-data eval questions. The OpenAI provider is written and awaiting its first live run.
+The agent loop, tools, eval scoring, and fixture store are covered by tests. The Claude provider has passed a live eval run. The HTTP API and map page run end to end on the fixture and on real Weld County parcels. The PostGIS store matches the in-memory store on every eval query and answers live questions on the real parcels, where the agent passes 22 of 23 real-data eval questions. The OpenAI provider is written and awaiting its first live run. The grounding check and follow-up questions are covered by tests with a scripted model and have not yet been run against a live model; the scores above predate them.
 
 With real data, the geocoder knows every Colorado city, town, and census-designated place. When two places share a name, such as the Twin Lakes in Adams and Lake counties, it returns both with their counties, and the agent asks which one is meant.
 
